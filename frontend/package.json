@@ -1,0 +1,13 @@
+{
+  "name": "co-living-app-frontend",
+  "version": "1.0.0",
+  "description": "Frontend for Co-living App",
+  "main": "src/App.jsx",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

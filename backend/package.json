@@ -1,0 +1,12 @@
+{
+  "name": "co-living-app-backend",
+  "version": "1.0.0",
+  "description": "Backend for Co-living App",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
