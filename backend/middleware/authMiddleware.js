@@ -32,9 +32,13 @@ const protect = (req, res, next) => {
 // Middleware pentru restricționare pe bază de ROL
 const authorize = (...roles) => {
     return (req, res, next) => {
+        if (req.user.role === "GOD") {
+            return next();
+        }
+
         if (!roles.includes(req.user.role)) {
             return res.status(403).json({
-                message: `Rolul ${req.user.role} nu are permisiunea de a accesa această resursă!`,
+                message: `Acces refuzat! Rolul tău (${req.user.role}) nu are permisiunea necesară.`,
             });
         }
         next();
