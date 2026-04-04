@@ -6,24 +6,28 @@ import AddExpense from './pages/AddExpense';
 import Signup from './pages/SignUp';
 import Users from './pages/Users';
 import ManageSpaces from './pages/ManageSpaces';
-import Profile from './pages/Profile'; // O creăm imediat
-import AdminDashboard from './pages/AdminDashboard'; // O creăm și pe asta
+import Profile from './pages/Profile';
+import AdminDashboard from './pages/AdminDashboard';
+import MainLayout from './components/MainLayout'; // Importăm layout-ul nou
 
 function App() {
   return (
     <Router>
       <Routes>
+        {/* Rute publice (fără meniu lateral) */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/activity" element={<Activity />} />
-        <Route path="/add-expense" element={<AddExpense />} />
+
+        {/* Rute private (Îmbrăcate în MainLayout pentru a avea Sidebar-ul) */}
+        <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
+        <Route path="/profile" element={<MainLayout><Profile /></MainLayout>} />
+        <Route path="/activity" element={<MainLayout><Activity /></MainLayout>} />
+        <Route path="/add-expense" element={<MainLayout><AddExpense /></MainLayout>} />
         
         {/* Rute de Management */}
-        <Route path="/users" element={<Users />} />
-        <Route path="/manage-spaces" element={<ManageSpaces />} />
-        <Route path="/admin-dashboard" element={<AdminDashboard />} />
+        <Route path="/users" element={<MainLayout><Users /></MainLayout>} />
+        <Route path="/manage-spaces" element={<MainLayout><ManageSpaces /></MainLayout>} />
+        <Route path="/admin-dashboard" element={<MainLayout><AdminDashboard /></MainLayout>} />
 
         {/* Redirecționări și Error Handling */}
         <Route path="/" element={<Navigate to="/login" />} />

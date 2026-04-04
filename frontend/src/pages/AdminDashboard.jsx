@@ -1,103 +1,88 @@
 import { useEffect, useState } from 'react';
 import API from '../api/axios';
-import { useNavigate } from 'react-router-dom';
 
 function AdminDashboard() {
-    const [managedData, setManagedData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
-    const navigate = useNavigate();
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        const fetchAdminData = async () => {
-            try {
-                setLoading(true);
-                const { data } = await API.get('/apartments/admin/overview');
-                // Verificăm dacă datele primite sunt un array
-                setManagedData(Array.isArray(data) ? data : []);
-                setError(null);
-            } catch (err) {
-                console.error("Eroare la încărcarea datelor de admin:", err);
-                setError("Nu s-au putut încărca datele complexului. Verifică drepturile de administrator.");
-            } finally {
-                setLoading(false);
-            }
-        };
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const res = await API.get('/apartments/admin/overview');
+        setData(res.data);
+      } catch (err) {
+        console.error("Eroare la încărcare dashboard admin:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAdminData();
+  }, []);
 
-        fetchAdminData();
-    }, []);
+  if (loading) return <p>Se încarcă datele administrative...</p>;
 
-    if (loading) return <div style={{ padding: '20px' }}>Se încarcă datele de administrare...</div>;
-    
-    if (error) return (
-        <div style={{ padding: '20px', color: 'red' }}>
-            <p>{error}</p>
-            <button onClick={() => navigate('/dashboard')}>Înapoi la Dashboard</button>
+  return (
+    <div>
+      <header style={{ marginBottom: '32px' }}>
+        <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-main)', margin: '0' }}>
+            Panou Administrare Complex 🏢
+        </h1>
+        <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+            Monitorizarea apartamentelor și a activității locatarilor.
+        </p>
+      </header>
+
+      {data.map(complex => (
+        <div key={complex.id} style={{ marginBottom: '40px' }}>
+          <h2 style={{ fontSize: '20px', marginBottom: '16px', color: 'var(--primary)' }}>{complex.name}</h2>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+            {complex.Apartments?.map(apt => (
+              <div key={apt.id} style={aptCardStyle}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #f3f4f6', paddingBottom: '12px', marginBottom: '12px' }}>
+                  <strong style={{ fontSize: '18px' }}>Ap. {apt.number}</strong>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Bloc {apt.block}</span>
+                </div>
+                
+                <div style={{ marginBottom: '12px' }}>
+                  <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>Locatari:</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {apt.Users?.length > 0 ? apt.Users.map(u => (
+                      <span key={u.id} style={userBadgeStyle}>{u.name}</span>
+                    )) : <em style={{ fontSize: '13px', color: '#999' }}>Niciun locatar alocat</em>}
+                  </div>
+                </div>
+
+                <div style={{ background: '#f9fafb', padding: '10px', borderRadius: '8px', fontSize: '14px' }}>
+                   <span>Total Cheltuieli: </span>
+                   <strong style={{ color: 'var(--text-main)' }}>
+                     {apt.Expenses?.reduce((acc, curr) => acc + curr.totalAmount, 0) || 0} RON
+                   </strong>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-    );
-
-    return (
-        <div style={{ padding: '20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2>Panou Administrator Complex</h2>
-                <button onClick={() => navigate('/dashboard')}>Înapoi</button>
-            </div>
-
-            {managedData.length === 0 ? (
-                <p>Nu aveți complexe alocate pentru administrare.</p>
-            ) : (
-                managedData.map(complex => (
-                    <div key={complex.id} style={complexCardStyle}>
-                        <div style={{ borderBottom: '1px solid #eee', marginBottom: '15px' }}>
-                            <h3 style={{ margin: '0 0 5px 0' }}>🏢 {complex.name}</h3>
-                            <p style={{ color: '#666', fontSize: '14px' }}>{complex.address}</p>
-                        </div>
-                        
-                        <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', 
-                            gap: '15px' 
-                        }}>
-                            {/* Verificare obligatorie pentru Apartments pentru a evita crash-ul */}
-                            {complex.Apartments && complex.Apartments.map(apt => (
-                                <div key={apt.id} style={aptCardStyle}>
-                                    <div style={{ fontWeight: 'bold', fontSize: '16px' }}>Apt. {apt.number}</div>
-                                    <div style={{ color: '#555', fontSize: '13px', marginTop: '5px' }}>
-                                        {apt.block ? `Bloc: ${apt.block}` : 'Fără bloc specificat'}
-                                    </div>
-                                    <p style={{ 
-                                        margin: '10px 0 0 0', 
-                                        paddingTop: '5px', 
-                                        borderTop: '1px solid #eee',
-                                        fontSize: '12px' 
-                                    }}>
-                                        Locatari: {apt.Users?.length || 0}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                ))
-            )}
-        </div>
-    );
+      ))}
+    </div>
+  );
 }
 
-const complexCardStyle = { 
-    border: '1px solid #ccc', 
-    padding: '20px', 
-    marginBottom: '20px', 
-    borderRadius: '12px',
-    backgroundColor: '#fff',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+const aptCardStyle = {
+  background: 'var(--bg-card)',
+  padding: '20px',
+  borderRadius: '16px',
+  boxShadow: 'var(--shadow)',
+  border: '1px solid #e5e7eb'
 };
 
-const aptCardStyle = { 
-    padding: '12px', 
-    backgroundColor: '#f8f9fa', 
-    border: '1px solid #e0e0e0',
-    borderRadius: '8px',
-    textAlign: 'center'
+const userBadgeStyle = {
+  background: '#eef2ff',
+  color: '#4338ca',
+  padding: '4px 10px',
+  borderRadius: '6px',
+  fontSize: '12px',
+  fontWeight: '500'
 };
 
 export default AdminDashboard;

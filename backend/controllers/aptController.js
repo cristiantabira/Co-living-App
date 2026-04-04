@@ -5,9 +5,9 @@ const { Expense } = require("../models/Expense"); //
 // Creare Apartament - DOAR ADMIN sau GOD
 const createApartment = async (req, res) => {
     try {
-        const { number, block, complexName } = req.body;
+        const { number, block, complexId } = req.body;
 
-        const newApt = await Apartment.create({ number, block, complexName });
+        const newApt = await Apartment.create({ number, block, complexId });
         res.status(201).json({
             message: "Apartament creat!",
             apartment: newApt,
@@ -116,6 +116,7 @@ const assignAdminToComplex = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
 const getAdminOverview = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -148,7 +149,7 @@ const getAdminOverview = async (req, res) => {
                                 model: Apartment,
                                 include: [
                                     { model: User, attributes: ["id", "name"] },
-                                    { model: Expense, as: "PaidExpenses" },
+                                    { model: Expense, as: "Expenses" },
                                 ],
                             },
                         ],
@@ -162,6 +163,7 @@ const getAdminOverview = async (req, res) => {
 
         res.json(complexes);
     } catch (error) {
+        console.error("Eroare Admin Overview:", error);
         res.status(500).json({ error: error.message });
     }
 };

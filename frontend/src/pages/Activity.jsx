@@ -20,40 +20,83 @@ function Activity() {
     }, []);
 
     return (
-        <div style={{ padding: '20px' }}>
-            <button onClick={() => navigate('/dashboard')}>← Înapoi la Dashboard</button>
-            <h2>Activitate Recentă</h2>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {history.length === 0 ? <p>Nicio activitate încă.</p> : history.map(exp => (
-                    <div key={exp.id} style={{
-                        border: '1px solid #ddd',
-                        padding: '15px',
-                        borderRadius: '8px',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        backgroundColor: exp.payerId === currentUser.id ? '#f0fff0' : '#fff0f0'
-                    }}>
-                        <div>
-                            <strong>{exp.description}</strong>
-                            <p style={{ margin: '5px 0', fontSize: '0.9em', color: '#666' }}>
-                                Plătit de: {exp.payerId === currentUser.id ? 'Tine' : exp.Payer.name}
-                            </p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontWeight: 'bold' }}>{exp.totalAmount} RON</div>
-                            <small>
-                                {exp.payerId === currentUser.id 
-                                    ? `Ai de recuperat: ${(exp.totalAmount - (exp.totalAmount / (exp.Debtors.length + 1))).toFixed(2)} RON`
-                                    : `Datoria ta: ${exp.Debtors.find(d => d.id === currentUser.id)?.ExpenseDebt.amountOwed} RON`}
-                            </small>
-                        </div>
+        <div>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-main)', margin: '0' }}>
+                        Activitate Recentă 📊
+                    </h1>
+                    <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
+                        Istoricul cheltuielilor și datoriilor din apartamentul tău.
+                    </p>
+                </div>
+            </header>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {history.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '12px' }}>
+                        <p style={{ color: 'var(--text-muted)' }}>Nicio activitate înregistrată încă.</p>
                     </div>
-                ))}
+                ) : (
+                    history.map(exp => {
+                        const isPayer = exp.payerId === currentUser.id;
+                        const accentColor = isPayer ? 'var(--success)' : 'var(--danger)';
+                        
+                        return (
+                            <div key={exp.id} style={activityCardStyle(accentColor)}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={iconBadgeStyle(accentColor)}>
+                                        {isPayer ? '⬆️' : '⬇️'}
+                                    </div>
+                                    <div>
+                                        <strong style={{ fontSize: '16px', display: 'block' }}>{exp.description}</strong>
+                                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                                            {isPayer ? 'Plătit de tine' : `Plătit de ${exp.Payer?.name}`}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontWeight: '700', fontSize: '18px', color: 'var(--text-main)' }}>
+                                        {exp.totalAmount} RON
+                                    </div>
+                                    <div style={{ fontSize: '13px', fontWeight: '500', color: accentColor, marginTop: '4px' }}>
+                                        {isPayer 
+                                            ? `Ai de recuperat: ${(exp.totalAmount - (exp.totalAmount / (exp.Debtors.length + 1))).toFixed(2)} RON`
+                                            : `Datoria ta: ${exp.Debtors.find(d => d.id === currentUser.id)?.ExpenseDebt.amountOwed} RON`}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
             </div>
         </div>
     );
 }
+
+// Stiluri pentru pagina de Activitate
+const activityCardStyle = (color) => ({
+    background: 'var(--bg-card)',
+    padding: '20px',
+    borderRadius: '12px',
+    boxShadow: 'var(--shadow)',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderLeft: `5px solid ${color}`,
+    transition: 'transform 0.2s ease',
+});
+
+const iconBadgeStyle = (color) => ({
+    width: '40px',
+    height: '40px',
+    borderRadius: '10px',
+    backgroundColor: `${color}15`, // Culoarea cu opacitate mică pentru fundalul icoanei
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '20px'
+});
 
 export default Activity;
