@@ -85,7 +85,10 @@ const getAllComplexes = async (req, res) => {
 const getAllApartments = async (req, res) => {
     try {
         const apartments = await Apartment.findAll({
-            include: [{ model: Complex, attributes: ["name"] }],
+            include: [
+                { model: Complex, attributes: ["name"] },
+                { model: User, attributes: ["id", "name"] }
+            ],
         });
         res.json(apartments);
     } catch (error) {
@@ -132,7 +135,7 @@ const getAdminOverview = async (req, res) => {
                         model: Apartment,
                         include: [
                             { model: User, attributes: ["id", "name"] },
-                            { model: Expense, as: "PaidExpenses" },
+                            { model: Expense, as: "Expenses" },
                         ],
                     },
                 ],

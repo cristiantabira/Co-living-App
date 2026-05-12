@@ -3,6 +3,7 @@ const User = require("./User");
 const Apartment = require("./Apartment");
 const { Expense, ExpenseDebt } = require("./Expense");
 const Complex = require("./Complex");
+const Task = require("./Task");
 
 const ComplexAdmin = sequelize.define("ComplexAdmin", {});
 
@@ -55,8 +56,12 @@ const setupAssociations = () => {
         foreignKey: "userId",
     });
 
+    // 7. Apartament <-> Tasks (Liste de cumpărături, remindere, tasks)
+    Apartment.hasMany(Task, { foreignKey: "apartmentId", as: "Tasks" });
+    Task.belongsTo(Apartment, { foreignKey: "apartmentId" });
+
     console.log(
-        "Toate relațiile au fost configurate, inclusiv Apartment -> Expenses.",
+        "Toate relațiile au fost configurate, inclusiv Task per Apartament.",
     );
 };
 

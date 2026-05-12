@@ -94,11 +94,9 @@ const updateUserRole = async (req, res) => {
         if (newRole === "ADMIN" && complexId) {
             const complex = await Complex.findByPk(complexId);
             if (!complex) {
-                return res
-                    .status(400)
-                    .json({
-                        message: "Rol actualizat, dar complexul nu există!",
-                    });
+                return res.status(400).json({
+                    message: "Rol actualizat, dar complexul nu există!",
+                });
             }
 
             // Adăugăm în tabela pivot ComplexAdmin

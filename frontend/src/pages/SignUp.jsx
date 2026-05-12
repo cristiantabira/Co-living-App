@@ -76,7 +76,13 @@ function SignUp() {
 }
 
 // Stilurile sunt aceleași ca la Login (containerStyle, loginCardStyle, etc.)
-const containerStyle = { height: '100vh', display: 'flex', alignItems: 'center', justifyCenter: 'center', background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)' };
+const containerStyle = {
+  height: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)'
+};
 const loginCardStyle = { background: 'white', padding: '40px', borderRadius: '20px', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', width: '100%', maxWidth: '400px' };
 const inputGroupStyle = { display: 'flex', flexDirection: 'column', gap: '8px' };
 const labelStyle = { fontSize: '14px', fontWeight: '600', color: '#374151' };

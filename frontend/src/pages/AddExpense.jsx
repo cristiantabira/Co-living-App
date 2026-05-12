@@ -6,7 +6,8 @@ function AddExpense() {
     const [description, setDescription] = useState('');
     const [totalAmount, setTotalAmount] = useState('');
     const [roommates, setRoommates] = useState([]);
-    const [selectedDebtors, setSelectedDebtors] = useState([]);
+    const [selectedDebtors, setSelectedDebtors] = useState({});
+    const [showCustomSplit, setShowCustomSplit] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -16,7 +17,11 @@ function AddExpense() {
                 const currentUser = JSON.parse(localStorage.getItem('user'));
                 const others = data.filter(r => r.id !== currentUser.id);
                 setRoommates(others);
-                setSelectedDebtors(others.map(r => r.id));
+                const initialDebtors = {};
+                others.forEach(r => {
+                    initialDebtors[r.id] = { selected: true, amount: '' };
+                });
+                setSelectedDebtors(initialDebtors);
             } catch (err) {
                 console.error("Eroare la încărcare colegi:", err);
             }
@@ -25,22 +30,52 @@ function AddExpense() {
     }, []);
 
     const handleCheckboxChange = (id) => {
-        if (selectedDebtors.includes(id)) {
-            setSelectedDebtors(selectedDebtors.filter(d => d !== id));
-        } else {
-            setSelectedDebtors([...selectedDebtors, id]);
+        setSelectedDebtors({
+            ...selectedDebtors,
+            [id]: { ...selectedDebtors[id], selected: !selectedDebtors[id]?.selected }
+        });
+    };
+
+    const handleAmountChange = (id, value) => {
+        setSelectedDebtors({
+            ...selectedDebtors,
+            [id]: { ...selectedDebtors[id], amount: value }
+        });
+    };
+
+    const getSelectedCount = () => Object.values(selectedDebtors).filter(d => d?.selected).length;
+    
+    const getEqualSplitAmount = () => {
+        if (!totalAmount || getSelectedCount() === 0) return 0;
+        return (parseFloat(totalAmount) / (getSelectedCount() + 1)).toFixed(2);
+    };
+
+    const validateSplit = () => {
+        const selectedList = Object.entries(selectedDebtors)
+            .filter(([_, d]) => d?.selected)
+            .map(([id, d]) => ({ id, amount: parseFloat(d?.amount || 0) }));
+
+        const totalDebtors = selectedList.reduce((sum, d) => sum + d.amount, 0);
+        const totalExpected = parseFloat(totalAmount) || 0;
+
+        if (Math.abs(totalDebtors - totalExpected) > 0.01) {
+            alert(`Suma debitorilor (${totalDebtors.toFixed(2)}) nu egalează totalul (${totalExpected.toFixed(2)})`);
+            return false;
         }
+        return true;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const participantsCount = selectedDebtors.length + 1;
-        const amountPerPerson = parseFloat(totalAmount) / participantsCount;
+        
+        if (!validateSplit()) return;
 
-        const debtorsData = selectedDebtors.map(id => ({
-            userId: id,
-            amountOwed: amountPerPerson.toFixed(2)
-        }));
+        const debtorsData = Object.entries(selectedDebtors)
+            .filter(([_, d]) => d?.selected)
+            .map(([id, d]) => ({
+                userId: parseInt(id),
+                amountOwed: parseFloat(d?.amount || 0).toFixed(2)
+            }));
 
         try {
             await API.post('/expenses', {
@@ -56,7 +91,7 @@ function AddExpense() {
     };
 
     return (
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '700px', margin: '0 auto' }}>
             <header style={{ marginBottom: '32px' }}>
                 <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-main)', margin: '0' }}>
                     Adaugă Cheltuială 💸
@@ -87,40 +122,88 @@ function AddExpense() {
                         value={totalAmount}
                         onChange={(e) => setTotalAmount(e.target.value)}
                         required 
+                        step="0.01"
                         style={inputStyle}
                     />
                 </div>
 
                 <div style={{ marginTop: '10px' }}>
-                    <label style={labelStyle}>Cine participă la cheltuială?</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <label style={labelStyle}>Cine participă la cheltuială?</label>
+                        <button
+                            type="button"
+                            onClick={() => setShowCustomSplit(!showCustomSplit)}
+                            style={toggleButtonStyle}
+                        >
+                            {showCustomSplit ? '🔒 Egal' : '⚙️ Custom'}
+                        </button>
+                    </div>
                     <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                        Suma se va împărți egal între tine și cei selectați.
+                        {showCustomSplit 
+                            ? 'Editează suma pe care fiecare persoană o datorează.' 
+                            : 'Suma se va împărți egal între tine și cei selectați.'}
                     </p>
                     <div style={debtorsGridStyle}>
                         {roommates.map(roommate => (
-                            <label key={roommate.id} style={debtorOptionStyle(selectedDebtors.includes(roommate.id))}>
-                                <input 
-                                    type="checkbox" 
-                                    checked={selectedDebtors.includes(roommate.id)}
-                                    onChange={() => handleCheckboxChange(roommate.id)}
-                                    style={{ marginRight: '10px' }}
-                                />
-                                {roommate.name}
-                            </label>
+                            <div key={roommate.id}>
+                                <label style={debtorOptionStyle(selectedDebtors[roommate.id]?.selected)}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedDebtors[roommate.id]?.selected || false}
+                                        onChange={() => handleCheckboxChange(roommate.id)}
+                                        style={{ marginRight: '10px' }}
+                                    />
+                                    {roommate.name}
+                                </label>
+                                {showCustomSplit && selectedDebtors[roommate.id]?.selected && (
+                                    <input
+                                        type="number"
+                                        placeholder="0.00"
+                                        value={selectedDebtors[roommate.id]?.amount || ''}
+                                        onChange={(e) => handleAmountChange(roommate.id, e.target.value)}
+                                        step="0.01"
+                                        min="0"
+                                        style={customAmountInputStyle}
+                                    />
+                                )}
+                            </div>
                         ))}
                     </div>
                 </div>
 
-                <div style={summaryBoxStyle}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-muted)' }}>Recuperezi per persoană:</span>
-                        <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '20px' }}>
-                            {totalAmount && selectedDebtors.length > 0 
-                                ? (totalAmount / (selectedDebtors.length + 1)).toFixed(2) 
-                                : '0.00'} RON
-                        </span>
+                {!showCustomSplit && (
+                    <div style={summaryBoxStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Recuperezi per persoană:</span>
+                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '20px' }}>
+                                {getEqualSplitAmount()} RON
+                            </span>
+                        </div>
                     </div>
-                </div>
+                )}
+
+                {showCustomSplit && (
+                    <div style={summaryBoxStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Total alocat debitorilor:</span>
+                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '20px' }}>
+                                {Object.entries(selectedDebtors)
+                                    .filter(([_, d]) => d?.selected)
+                                    .reduce((sum, [_, d]) => sum + parseFloat(d?.amount || 0), 0)
+                                    .toFixed(2)} RON
+                            </span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: totalAmount && Math.abs(Object.entries(selectedDebtors)
+                                    .filter(([_, d]) => d?.selected)
+                                    .reduce((sum, [_, d]) => sum + parseFloat(d?.amount || 0), 0) - parseFloat(totalAmount)) > 0.01 ? '#ef4444' : '#22c55e' }}>
+                            {totalAmount && Math.abs(Object.entries(selectedDebtors)
+                                    .filter(([_, d]) => d?.selected)
+                                    .reduce((sum, [_, d]) => sum + parseFloat(d?.amount || 0), 0) - parseFloat(totalAmount)) > 0.01 
+                                ? '❌ Suma debitorilor trebuie să egaleze totalul!' 
+                                : '✅ Suma este corectă'}
+                        </div>
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
                     <button type="submit" style={submitButtonStyle}>
@@ -167,6 +250,16 @@ const inputStyle = {
     transition: 'border-color 0.2s',
 };
 
+const customAmountInputStyle = {
+    padding: '8px 12px',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb',
+    fontSize: '14px',
+    marginTop: '6px',
+    width: '100%',
+    outline: 'none',
+};
+
 const debtorsGridStyle = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
@@ -190,6 +283,17 @@ const summaryBoxStyle = {
     padding: '20px',
     borderRadius: '12px',
     border: '1px dashed #e5e7eb'
+};
+
+const toggleButtonStyle = {
+    padding: '6px 12px',
+    borderRadius: '6px',
+    border: '1px solid #e5e7eb',
+    backgroundColor: '#f3f4f6',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '600',
+    transition: 'all 0.2s'
 };
 
 const submitButtonStyle = {

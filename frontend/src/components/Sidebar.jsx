@@ -7,7 +7,7 @@ const Sidebar = () => {
 
   const menuItems = [
     { name: 'Dashboard', path: '/dashboard', icon: '🏠', roles: ['USER', 'ADMIN', 'GOD'] },
-    { name: 'Activitate', path: '/activity', icon: '📊', roles: ['USER', 'ADMIN', 'GOD'] },
+    { name: 'Istoric Cheltuieli', path: '/activity', icon: '📊', roles: ['USER', 'ADMIN', 'GOD'] },
     { name: 'Profilul Meu', path: '/profile', icon: '👤', roles: ['USER', 'ADMIN', 'GOD'] },
     { name: 'Admin Complex', path: '/admin-dashboard', icon: '🏢', roles: ['ADMIN', 'GOD'] },
     { name: 'Gestionare Utilizatori', path: '/users', icon: '👥', roles: ['GOD'] },

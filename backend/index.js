@@ -5,6 +5,7 @@ const setupAssociations = require("./models/associations"); // Relațiile
 const authRoutes = require("./routes/authRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const aptRoutes = require("./routes/aptRoutes");
+const taskRoutes = require("./routes/taskRoutes");
 const app = express();
 
 app.use(cors());
@@ -12,6 +13,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/apartments", aptRoutes);
+app.use("/api/tasks", taskRoutes);
 
 // Inițializăm relațiile
 setupAssociations();

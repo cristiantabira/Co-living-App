@@ -24,7 +24,7 @@ function Activity() {
             <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <h1 style={{ fontSize: '28px', fontWeight: '700', color: 'var(--text-main)', margin: '0' }}>
-                        Activitate Recentă 📊
+                        Istoric Cheltuieli 📊
                     </h1>
                     <p style={{ color: 'var(--text-muted)', marginTop: '8px' }}>
                         Istoricul cheltuielilor și datoriilor din apartamentul tău.
@@ -40,7 +40,12 @@ function Activity() {
                 ) : (
                     history.map(exp => {
                         const isPayer = exp.payerId === currentUser.id;
+                        const isAdminBilled = exp.isAdminBilled;
                         const accentColor = isPayer ? 'var(--success)' : 'var(--danger)';
+                        
+                        // Pentru facturile admin, arătă Complex name; altfel Payer name
+                        const paymentSourceName = isAdminBilled ? exp.Complex?.name : exp.Payer?.name;
+                        const paymentSourceText = isAdminBilled ? `Datorezi ${paymentSourceName}` : `Plătit de ${paymentSourceName}`;
                         
                         return (
                             <div key={exp.id} style={activityCardStyle(accentColor)}>
@@ -51,7 +56,7 @@ function Activity() {
                                     <div>
                                         <strong style={{ fontSize: '16px', display: 'block' }}>{exp.description}</strong>
                                         <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                                            {isPayer ? 'Plătit de tine' : `Plătit de ${exp.Payer?.name}`}
+                                            {isPayer ? 'Plătit de tine' : paymentSourceText}
                                         </span>
                                     </div>
                                 </div>

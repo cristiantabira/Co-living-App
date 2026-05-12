@@ -13,6 +13,9 @@ function Login() {
       const { data } = await API.post('/auth/login', { email, password });
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
+      if (data.apartment) {
+        localStorage.setItem('apartment', JSON.stringify(data.apartment));
+      }
       navigate('/dashboard');
     } catch (err) {
       alert('Date de logare incorecte!');
