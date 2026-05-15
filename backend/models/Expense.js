@@ -16,6 +16,11 @@ const Expense = sequelize.define("Expense", {
 
 // Tabel Pivot pentru datorii individuale (cine cât datorează din această cheltuială)
 const ExpenseDebt = sequelize.define("ExpenseDebt", {
+    id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+    },
     amountOwed: { type: DataTypes.FLOAT, allowNull: false },
     isSettled: { type: DataTypes.BOOLEAN, defaultValue: false },
 });

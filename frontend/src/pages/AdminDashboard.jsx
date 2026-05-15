@@ -52,35 +52,50 @@ function AdminDashboard() {
     }
 
     try {
-      // Calculez cati locatari sunt in complex/apartament
       let locatari = 0;
+      let distributionDetails = '';
+
       if (billFormData.scopeType === 'COMPLEX') {
-        const complex = complexes.find(c => c.id === parseInt(billFormData.scopeId));
-        if (complex) {
-          const aptsInComplex = apartments.filter(a => a.complexId === complex.id);
-          locatari = aptsInComplex.reduce((sum, apt) => sum + (apt.Users?.length || 0), 0);
+        const aptsInComplex = apartments.filter(a => a.complexId === parseInt(billFormData.scopeId));
+        const aptsWithResidents = aptsInComplex.filter(apt => apt.Users && apt.Users.length > 0);
+
+        if (aptsWithResidents.length === 0) {
+          alert("Nu sunt apartamente cu locatari în acest complex!");
+          return;
         }
+
+        // Calculez suma per apartament, apoi per locutar
+        const totalAmount = parseFloat(billFormData.totalAmount);
+        const amountPerApt = (totalAmount / aptsWithResidents.length).toFixed(2);
+        
+        const details = aptsWithResidents.map(apt => {
+          const amountPerResident = (amountPerApt / apt.Users.length).toFixed(2);
+          locatari += apt.Users.length;
+          return `Ap. ${apt.number}: ${amountPerResident} RON/locutar (${apt.Users.length} locatari)`;
+        });
+
+        distributionDetails = details.join('\n');
       } else {
         const apt = apartments.find(a => a.id === parseInt(billFormData.scopeId));
         locatari = apt?.Users?.length || 0;
-      }
 
-      if (locatari === 0) {
-        alert("Nu sunt locatari pentru a distribui factura!");
-        return;
-      }
+        if (locatari === 0) {
+          alert("Nu sunt locatari în acest apartament!");
+          return;
+        }
 
-      const amountPerPerson = (parseFloat(billFormData.totalAmount) / locatari).toFixed(2);
+        const amountPerPerson = (parseFloat(billFormData.totalAmount) / locatari).toFixed(2);
+        distributionDetails = `${amountPerPerson} RON/locutar`;
+      }
 
       await API.post('/expenses/admin/bill', {
         scopeType: billFormData.scopeType,
         scopeId: parseInt(billFormData.scopeId),
         description: billFormData.description,
-        totalAmount: parseFloat(billFormData.totalAmount),
-        amountPerPerson: parseFloat(amountPerPerson)
+        totalAmount: parseFloat(billFormData.totalAmount)
       });
 
-      alert(`Factură creată! ${locatari} locatari vor fi taxați cu ${amountPerPerson} RON fiecare.`);
+      alert(`Factură creată!\n\n${distributionDetails}\n\nTotal: ${locatari} locatari`);
       setBillFormData({ scopeType: 'COMPLEX', scopeId: '', description: '', totalAmount: '' });
       setShowBillForm(false);
       fetchAdminData();
@@ -203,9 +218,9 @@ function AdminDashboard() {
                 </div>
 
                 <div style={{ background: '#f9fafb', padding: '10px', borderRadius: '8px', fontSize: '14px' }}>
-                   <span>Total Cheltuieli: </span>
+                   <span>Datorii Restante: </span>
                    <strong style={{ color: 'var(--text-main)' }}>
-                     {apt.Expenses?.reduce((acc, curr) => acc + curr.totalAmount, 0) || 0} RON
+                     {(apt.totalUnpaidDebt || 0).toFixed(2)} RON
                    </strong>
                 </div>
               </div>

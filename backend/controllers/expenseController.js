@@ -43,7 +43,7 @@ const createExpense = async (req, res) => {
 // Noua funcție pentru facturile admin per complex sau apartament
 const createAdminBill = async (req, res) => {
     try {
-        const { scopeType, scopeId, description, totalAmount, amountPerPerson } = req.body;
+        const { scopeType, scopeId, description, totalAmount, distributionData } = req.body;
         const adminId = req.user.id;
 
         // Validare
@@ -54,19 +54,54 @@ const createAdminBill = async (req, res) => {
         let debtors = [];
 
         if (scopeType === "COMPLEX") {
-            // Găsim toți locatarii din complex
-            const apartments = await Apartment.findAll({ where: { complexId: scopeId } });
-            const apartmentIds = apartments.map(a => a.id);
+            // Găsim apartamentele cu > 0 locuitori
+            const apartments = await Apartment.findAll({ 
+                where: { complexId: scopeId },
+                include: [
+                    {
+                        model: User,
+                        attributes: ["id"],
+                        required: false
+                    }
+                ]
+            });
 
-            debtors = await User.findAll({
-                where: { apartmentId: { [Op.in]: apartmentIds } },
-                attributes: ["id"]
+            // Filtrăm doar apartamentele cu locatari
+            const apartmentsWithResidents = apartments.filter(a => a.Users && a.Users.length > 0);
+
+            if (apartmentsWithResidents.length === 0) {
+                return res.status(400).json({ message: "Nu au fost găsite apartamente cu locatari în acest complex" });
+            }
+
+            // Distribuim suma între apartamentele cu locatari, apoi între locatarii lor
+            const amountPerApartment = parseFloat(totalAmount) / apartmentsWithResidents.length;
+
+            apartmentsWithResidents.forEach(apt => {
+                const amountPerResident = (amountPerApartment / apt.Users.length).toFixed(2);
+                apt.Users.forEach(user => {
+                    debtors.push({
+                        userId: user.id,
+                        amountOwed: amountPerResident
+                    });
+                });
             });
         } else if (scopeType === "APARTMENT") {
             // Găsim locatarii din apartament
-            debtors = await User.findAll({
+            const residents = await User.findAll({
                 where: { apartmentId: scopeId },
                 attributes: ["id"]
+            });
+
+            if (residents.length === 0) {
+                return res.status(400).json({ message: "Nu au fost găsiți locatari pentru acest apartament" });
+            }
+
+            const amountPerResident = (parseFloat(totalAmount) / residents.length).toFixed(2);
+            residents.forEach(user => {
+                debtors.push({
+                    userId: user.id,
+                    amountOwed: amountPerResident
+                });
             });
         }
 
@@ -75,7 +110,7 @@ const createAdminBill = async (req, res) => {
         }
 
         // Creăm cheltuiala
-        const expense = await Expense.create({
+        const expenseData = {
             description,
             totalAmount,
             category: scopeType === "COMPLEX" ? "Utilități Complex" : "Utilități Apartament",
@@ -83,13 +118,20 @@ const createAdminBill = async (req, res) => {
             scopeType,
             scopeId,
             isAdminBilled: true,
-        });
+        };
+
+        // Dacă e factură pe apartament, setez și apartmentId
+        if (scopeType === "APARTMENT") {
+            expenseData.apartmentId = scopeId;
+        }
+
+        const expense = await Expense.create(expenseData);
 
         // Distribuim datoriile
         const debtEntries = debtors.map((debtor) => ({
             expenseId: expense.id,
-            userId: debtor.id,
-            amountOwed: parseFloat(amountPerPerson).toFixed(2),
+            userId: debtor.userId,
+            amountOwed: parseFloat(debtor.amountOwed).toFixed(2),
             isSettled: false,
         }));
 
@@ -157,43 +199,44 @@ const getBalance = async (req, res) => {
 };
 
 const getExpenseHistory = async (req, res) => {
-    try {
-        const userId = req.user.id;
+     try {
+         const userId = req.user.id;
 
-        const expenses = await Expense.findAll({
-            include: [
-                {
-                    model: User,
-                    as: "Payer",
-                    attributes: ["id", "name"],
-                },
-                {
-                    model: User,
-                    as: "Debtors",
-                    attributes: ["id", "name"],
-                    through: { attributes: ["amountOwed", "isSettled"] },
-                },
-                {
-                    model: Complex,
-                    attributes: ["id", "name"],
-                    required: false,
-                },
-            ],
-            order: [["createdAt", "DESC"]], // Cele mai noi primele
-        });
+         const expenses = await Expense.findAll({
+             include: [
+                 {
+                     model: User,
+                     as: "Payer",
+                     attributes: ["id", "name"],
+                 },
+                 {
+                     model: User,
+                     as: "Debtors",
+                     attributes: ["id", "name"],
+                     through: { attributes: ["amountOwed", "isSettled"] },
+                 },
+                 {
+                     model: Complex,
+                     as: "Complex",
+                     attributes: ["id", "name"],
+                     required: false,
+                 },
+             ],
+             order: [["createdAt", "DESC"]], // Cele mai noi primele
+         });
 
-        // Filtrăm ca utilizatorul să vadă doar cheltuielile care îl privesc
-        const myHistory = expenses.filter((exp) => {
-            const isPayer = exp.payerId === userId;
-            const isDebtor = exp.Debtors.some((d) => d.id === userId);
-            return isPayer || isDebtor;
-        });
+         // Filtrăm ca utilizatorul să vadă doar cheltuielile care îl privesc
+         const myHistory = expenses.filter((exp) => {
+             const isPayer = exp.payerId === userId;
+             const isDebtor = exp.Debtors.some((d) => d.id === userId);
+             return isPayer || isDebtor;
+         });
 
-        res.json(myHistory);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
+         res.json(myHistory);
+     } catch (error) {
+         res.status(500).json({ error: error.message });
+     }
+ };
 
 const settleDebt = async (req, res) => {
     try {

@@ -5,17 +5,21 @@ import { useNavigate } from 'react-router-dom';
 function AddExpense() {
     const [description, setDescription] = useState('');
     const [totalAmount, setTotalAmount] = useState('');
+    const [myAmount, setMyAmount] = useState(''); // Ce parte din total mă afectează pe mine
     const [roommates, setRoommates] = useState([]);
     const [selectedDebtors, setSelectedDebtors] = useState({});
     const [showCustomSplit, setShowCustomSplit] = useState(false);
+    const [currentUser, setCurrentUser] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
         const fetchRoommates = async () => {
             try {
+                const user = JSON.parse(localStorage.getItem('user'));
+                setCurrentUser(user);
+                
                 const { data } = await API.get('/apartments/roommates');
-                const currentUser = JSON.parse(localStorage.getItem('user'));
-                const others = data.filter(r => r.id !== currentUser.id);
+                const others = data.filter(r => r.id !== user.id);
                 setRoommates(others);
                 const initialDebtors = {};
                 others.forEach(r => {
@@ -45,37 +49,62 @@ function AddExpense() {
 
     const getSelectedCount = () => Object.values(selectedDebtors).filter(d => d?.selected).length;
     
-    const getEqualSplitAmount = () => {
-        if (!totalAmount || getSelectedCount() === 0) return 0;
-        return (parseFloat(totalAmount) / (getSelectedCount() + 1)).toFixed(2);
+    const getEqualSplitAmountPerPerson = () => {
+        if (!totalAmount || (getSelectedCount() === 0 && !myAmount)) return 0;
+        const total = parseFloat(totalAmount);
+        const myPart = parseFloat(myAmount) || 0;
+        const remainingForDebtors = total - myPart;
+        const splitCount = getSelectedCount();
+        
+        if (splitCount === 0) return 0;
+        return (remainingForDebtors / splitCount).toFixed(2);
     };
 
-    const validateSplit = () => {
-        const selectedList = Object.entries(selectedDebtors)
-            .filter(([_, d]) => d?.selected)
-            .map(([id, d]) => ({ id, amount: parseFloat(d?.amount || 0) }));
-
-        const totalDebtors = selectedList.reduce((sum, d) => sum + d.amount, 0);
+    const validateSplit = (debtorsData) => {
+        const totalDebtors = debtorsData.reduce((sum, d) => sum + parseFloat(d.amountOwed), 0);
+        const myPart = parseFloat(myAmount) || 0;
         const totalExpected = parseFloat(totalAmount) || 0;
+        const totalAllocated = totalDebtors + myPart;
 
-        if (Math.abs(totalDebtors - totalExpected) > 0.01) {
-            alert(`Suma debitorilor (${totalDebtors.toFixed(2)}) nu egalează totalul (${totalExpected.toFixed(2)})`);
+        if (Math.abs(totalAllocated - totalExpected) > 0.01) {
+            alert(`Suma alocată (${totalAllocated.toFixed(2)}) nu egalează totalul (${totalExpected.toFixed(2)})`);
             return false;
         }
+        
+        if (totalExpected === 0) {
+            alert('Introdu o sumă totală mai mare decât 0');
+            return false;
+        }
+        
         return true;
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
-        if (!validateSplit()) return;
 
-        const debtorsData = Object.entries(selectedDebtors)
-            .filter(([_, d]) => d?.selected)
-            .map(([id, d]) => ({
-                userId: parseInt(id),
-                amountOwed: parseFloat(d?.amount || 0).toFixed(2)
-            }));
+        let debtorsData;
+        if (showCustomSplit) {
+            debtorsData = Object.entries(selectedDebtors)
+                .filter(([_, d]) => d?.selected)
+                .map(([id, d]) => ({
+                    userId: parseInt(id),
+                    amountOwed: parseFloat(d?.amount || 0).toFixed(2)
+                }));
+        } else {
+            // Modul egal: restul după ce scad suma mea se-mparte egal între debitori
+            const myPart = parseFloat(myAmount) || 0;
+            const remainingForDebtors = parseFloat(totalAmount) - myPart;
+            const amountPerDebtor = getSelectedCount() > 0 ? (remainingForDebtors / getSelectedCount()).toFixed(2) : '0.00';
+            
+            debtorsData = Object.entries(selectedDebtors)
+                .filter(([_, d]) => d?.selected)
+                .map(([id, _]) => ({
+                    userId: parseInt(id),
+                    amountOwed: amountPerDebtor
+                }));
+        }
+
+        if (!validateSplit(debtorsData)) return;
 
         try {
             await API.post('/expenses', {
@@ -127,6 +156,22 @@ function AddExpense() {
                     />
                 </div>
 
+                <div style={inputGroupStyle}>
+                    <label style={labelStyle}>Suma care mă afectează pe mine (RON)</label>
+                    <input 
+                        type="number" 
+                        placeholder="0.00" 
+                        value={myAmount}
+                        onChange={(e) => setMyAmount(e.target.value)}
+                        step="0.01"
+                        min="0"
+                        style={inputStyle}
+                    />
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+                        Lasa gol sau introdu 0 dacă toată suma o datorează colegii.
+                    </p>
+                </div>
+
                 <div style={{ marginTop: '10px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <label style={labelStyle}>Cine participă la cheltuială?</label>
@@ -141,7 +186,7 @@ function AddExpense() {
                     <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
                         {showCustomSplit 
                             ? 'Editează suma pe care fiecare persoană o datorează.' 
-                            : 'Suma se va împărți egal între tine și cei selectați.'}
+                            : 'Restul sumei se va împărți egal între colegii selectați.'}
                     </p>
                     <div style={debtorsGridStyle}>
                         {roommates.map(roommate => (
@@ -173,10 +218,16 @@ function AddExpense() {
 
                 {!showCustomSplit && (
                     <div style={summaryBoxStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Suma mea:</span>
+                            <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '18px' }}>
+                                {(parseFloat(myAmount) || 0).toFixed(2)} RON
+                            </span>
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ color: 'var(--text-muted)' }}>Recuperezi per persoană:</span>
-                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '20px' }}>
-                                {getEqualSplitAmount()} RON
+                            <span style={{ color: 'var(--text-muted)' }}>Per coleg selectat:</span>
+                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '18px' }}>
+                                {getEqualSplitAmountPerPerson()} RON
                             </span>
                         </div>
                     </div>
@@ -184,9 +235,15 @@ function AddExpense() {
 
                 {showCustomSplit && (
                     <div style={summaryBoxStyle}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>Suma mea:</span>
+                            <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '18px' }}>
+                                {(parseFloat(myAmount) || 0).toFixed(2)} RON
+                            </span>
+                        </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                             <span style={{ color: 'var(--text-muted)' }}>Total alocat debitorilor:</span>
-                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '20px' }}>
+                            <span style={{ fontWeight: '700', color: 'var(--primary)', fontSize: '18px' }}>
                                 {Object.entries(selectedDebtors)
                                     .filter(([_, d]) => d?.selected)
                                     .reduce((sum, [_, d]) => sum + parseFloat(d?.amount || 0), 0)

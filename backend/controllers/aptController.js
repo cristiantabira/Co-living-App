@@ -124,24 +124,25 @@ const getAdminOverview = async (req, res) => {
     try {
         const userId = req.user.id;
         const userRole = req.user.role;
+        const { Expense, ExpenseDebt } = require("../models/Expense");
+        const User = require("../models/User");
+        const { Op } = require("sequelize");
+        const sequelize = require("../models/index");
 
         let complexes;
 
         if (userRole === "GOD") {
-            // Dacă e GOD, ignorăm tabela pivot și luăm TOATE complexele din sistem
             complexes = await Complex.findAll({
                 include: [
                     {
                         model: Apartment,
                         include: [
                             { model: User, attributes: ["id", "name"] },
-                            { model: Expense, as: "Expenses" },
                         ],
                     },
                 ],
             });
         } else {
-            // Dacă e ADMIN, luăm doar ce e alocat în ComplexAdmin
             const adminWithComplexes = await User.findByPk(userId, {
                 include: [
                     {
@@ -152,19 +153,76 @@ const getAdminOverview = async (req, res) => {
                                 model: Apartment,
                                 include: [
                                     { model: User, attributes: ["id", "name"] },
-                                    { model: Expense, as: "Expenses" },
                                 ],
                             },
                         ],
                     },
                 ],
             });
-            complexes = adminWithComplexes
-                ? adminWithComplexes.ManagedComplexes
-                : [];
+            
+            complexes = adminWithComplexes?.ManagedComplexes || [];
         }
 
-        res.json(complexes);
+        console.log("Complexes found:", complexes.length);
+
+        // Stochez datoriile într-o structură separată
+        const debtsMap = {}; // { "complexId-aptId": totalDebt }
+
+        // Pentru fiecare apartament, calculez datoriile restante direct din DB
+        for (let complex of complexes) {
+            for (let apt of complex.Apartments || []) {
+                // Găsesc toți utilizatorii din apartament
+                const userIds = apt.Users?.map(u => u.id) || [];
+                
+                if (userIds.length > 0) {
+                    try {
+                        // Calculez suma datoriilor restante pentru utilizatorii din acest apartament
+                        // DOAR pentru cheltuielile facturate de admin (isAdminBilled: true)
+                        const debtResult = await ExpenseDebt.findAll({
+                            attributes: [
+                                [sequelize.fn('SUM', sequelize.col('ExpenseDebt.amountOwed')), 'totalDebt']
+                            ],
+                            where: {
+                                userId: { [Op.in]: userIds },
+                                isSettled: false
+                            },
+                            include: [
+                                {
+                                    model: Expense,
+                                    where: { isAdminBilled: true },
+                                    attributes: []
+                                }
+                            ],
+                            raw: true
+                        });
+
+                        const totalDebt = debtResult[0]?.totalDebt || 0;
+                        debtsMap[`${complex.id}-${apt.id}`] = totalDebt;
+                    } catch (err) {
+                        console.error(`Error calculating debt for apt ${apt.number}:`, err);
+                        debtsMap[`${complex.id}-${apt.id}`] = 0;
+                    }
+                } else {
+                    debtsMap[`${complex.id}-${apt.id}`] = 0;
+                }
+            }
+        }
+
+        // Convertesc la plain JSON și adaug totalUnpaidDebt din map
+        const plainComplexes = complexes.map(c => {
+            const cPlain = c.toJSON ? c.toJSON() : c;
+            cPlain.Apartments = (cPlain.Apartments || []).map(a => {
+                const aPlain = a.toJSON ? a.toJSON() : a;
+                const totalDebt = debtsMap[`${c.id}-${a.id}`] || 0;
+                return {
+                    ...aPlain,
+                    totalUnpaidDebt: totalDebt
+                };
+            });
+            return cPlain;
+        });
+
+        res.json(plainComplexes);
     } catch (error) {
         console.error("Eroare Admin Overview:", error);
         res.status(500).json({ error: error.message });

@@ -19,11 +19,14 @@ const setupAssociations = () => {
     });
     Apartment.belongsTo(Complex, { foreignKey: "complexId" });
 
-    // --- RELAȚIA NOUĂ CARE LIPSEA ---
     // 3. Apartament <-> Cheltuieli
     // Aceasta permite Admin Dashboard-ului să vadă cheltuielile per apartament
     Apartment.hasMany(Expense, { foreignKey: "apartmentId", as: "Expenses" });
     Expense.belongsTo(Apartment, { foreignKey: "apartmentId" });
+
+    // 3b. Complex <-> Cheltuieli (pentru facturile administrative pe complex)
+    Complex.hasMany(Expense, { foreignKey: "scopeId", as: "Expenses", constraints: false });
+    Expense.belongsTo(Complex, { foreignKey: "scopeId", as: "Complex", constraints: false });
 
     // 4. User <-> Expense (Plătitor)
     User.hasMany(Expense, { foreignKey: "payerId", as: "PaidExpenses" });
