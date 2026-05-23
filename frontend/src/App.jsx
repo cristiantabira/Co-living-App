@@ -8,6 +8,7 @@ import Users from './pages/Users';
 import ManageSpaces from './pages/ManageSpaces';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/AdminDashboard';
+import DebtsDetails from './pages/DebtsDetails';
 import MainLayout from './components/MainLayout'; // Importăm layout-ul nou
 
 function App() {
@@ -23,6 +24,7 @@ function App() {
         <Route path="/profile" element={<MainLayout><Profile /></MainLayout>} />
         <Route path="/activity" element={<MainLayout><Activity /></MainLayout>} />
         <Route path="/add-expense" element={<MainLayout><AddExpense /></MainLayout>} />
+        <Route path="/debts-details" element={<DebtsDetails />} />
         
         {/* Rute de Management */}
         <Route path="/users" element={<MainLayout><Users /></MainLayout>} />

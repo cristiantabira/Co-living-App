@@ -257,6 +257,157 @@ const settleDebt = async (req, res) => {
     }
 };
 
+// Endpoint pentru a obține datorii detaliate: cât datorez fiecărei persoane și cât îmi datorează
+const getDebtsDetails = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        // 1. DATORII: Cât datorez eu altora
+        const myDebts = await ExpenseDebt.findAll({
+            where: { userId: userId, isSettled: false },
+            include: [
+                {
+                    model: Expense,
+                    attributes: ["id", "description", "createdAt"],
+                    include: [
+                        {
+                            model: User,
+                            as: "Payer",
+                            attributes: ["id", "name"],
+                        },
+                    ],
+                },
+            ],
+        });
+
+        // 2. CREDITE: Cât îmi datorează alții (cheltuielile pe care le-am plătit eu)
+        const expenses = await Expense.findAll({
+            where: { payerId: userId },
+            include: [
+                {
+                    model: User,
+                    as: "Debtors",
+                    attributes: ["id", "name"],
+                    through: { attributes: ["amountOwed", "isSettled"] },
+                },
+            ],
+        });
+
+        // Agregare DATORII per persoană
+        const debtsByPerson = {};
+        myDebts.forEach((debt) => {
+            const payerId = debt.Expense.Payer.id;
+            const payerName = debt.Expense.Payer.name;
+            const key = `${payerId}`;
+
+            if (!debtsByPerson[key]) {
+                debtsByPerson[key] = {
+                    personId: payerId,
+                    personName: payerName,
+                    totalAmount: 0,
+                    debts: [],
+                };
+            }
+            debtsByPerson[key].totalAmount += parseFloat(debt.amountOwed);
+            debtsByPerson[key].debts.push({
+                debtId: debt.id,
+                expenseId: debt.Expense.id,
+                description: debt.Expense.description,
+                amount: debt.amountOwed,
+                createdAt: debt.Expense.createdAt,
+            });
+        });
+
+        // Agregare CREDITE per persoană (cine îmi datorează)
+        const creditsByPerson = {};
+        expenses.forEach((expense) => {
+            expense.Debtors.forEach((debtor) => {
+                if (!debtor.ExpenseDebt.isSettled) {
+                    const key = `${debtor.id}`;
+                    if (!creditsByPerson[key]) {
+                        creditsByPerson[key] = {
+                            personId: debtor.id,
+                            personName: debtor.name,
+                            totalAmount: 0,
+                            credits: [],
+                        };
+                    }
+                    creditsByPerson[key].totalAmount += parseFloat(debtor.ExpenseDebt.amountOwed);
+                    creditsByPerson[key].credits.push({
+                        debtId: debtor.ExpenseDebt.id,
+                        expenseId: expense.id,
+                        description: expense.description,
+                        amount: debtor.ExpenseDebt.amountOwed,
+                        createdAt: expense.createdAt,
+                    });
+                }
+            });
+        });
+
+        res.json({
+            debtsTo: Object.values(debtsByPerson).map((d) => ({
+                personId: d.personId,
+                personName: d.personName,
+                totalAmount: parseFloat(d.totalAmount.toFixed(2)),
+                details: d.debts,
+            })),
+            creditsFrom: Object.values(creditsByPerson).map((c) => ({
+                personId: c.personId,
+                personName: c.personName,
+                totalAmount: parseFloat(c.totalAmount.toFixed(2)),
+                details: c.credits,
+            })),
+        });
+    } catch (error) {
+        console.error("Eroare la getDebtsDetails:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Endpoint pentru a obține cheltuieli separate: administrativă vs personale
+const getExpensesByType = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { type } = req.query; // "ADMIN" sau "PERSONAL"
+
+        // Obținem toate cheltuielile unde utilizatorul e implicat
+        const expenses = await Expense.findAll({
+            include: [
+                {
+                    model: User,
+                    as: "Payer",
+                    attributes: ["id", "name"],
+                },
+                {
+                    model: User,
+                    as: "Debtors",
+                    attributes: ["id", "name"],
+                    through: { attributes: ["amountOwed", "isSettled"] },
+                },
+            ],
+            order: [["createdAt", "DESC"]],
+        });
+
+        // Filtrare: care cheltuieli îl privesc pe user și potrivit tipului
+        let filtered = expenses.filter((exp) => {
+            const isPayer = exp.payerId === userId;
+            const isDebtor = exp.Debtors.some((d) => d.id === userId);
+            return isPayer || isDebtor;
+        });
+
+        // Dacă e specificat tipul, filtrez doar administrativă sau personale
+        if (type === "ADMIN") {
+            filtered = filtered.filter((exp) => exp.isAdminBilled === true);
+        } else if (type === "PERSONAL") {
+            filtered = filtered.filter((exp) => exp.isAdminBilled === false);
+        }
+
+        res.json(filtered);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 module.exports = {
     createExpense,
     createAdminBill,
@@ -264,4 +415,6 @@ module.exports = {
     getBalance,
     getExpenseHistory,
     settleDebt,
+    getDebtsDetails,
+    getExpensesByType,
 };

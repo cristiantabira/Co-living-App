@@ -121,14 +121,16 @@ function Dashboard() {
                 gap: '24px', 
                 marginBottom: '40px' 
             }}>
-                <div style={cardStyle('var(--success)')}>
+                <div style={cardStyle('var(--success)')} onClick={() => navigate('/debts-details')} style={{...cardStyle('var(--success)'), cursor: 'pointer', transition: 'transform 0.2s'}}>
                     <p style={cardLabelStyle}>De recuperat</p>
                     <h2 style={cardValueStyle('var(--success)')}>{balance.toReceive} RON</h2>
+                    <small style={{color: 'var(--text-muted)'}}>Clic pentru detalii</small>
                 </div>
 
-                <div style={cardStyle('var(--danger)')}>
+                <div style={cardStyle('var(--danger)')} onClick={() => navigate('/debts-details')} style={{...cardStyle('var(--danger)'), cursor: 'pointer', transition: 'transform 0.2s'}}>
                     <p style={cardLabelStyle}>De plătit</p>
                     <h2 style={cardValueStyle('var(--danger)')}>{balance.toPay} RON</h2>
+                    <small style={{color: 'var(--text-muted)'}}>Clic pentru detalii</small>
                 </div>
 
                 <div style={cardStyle('var(--primary)')}>
