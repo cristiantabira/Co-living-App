@@ -86,7 +86,7 @@ function Activity() {
                         transition: 'all 0.2s ease'
                     }}
                 >
-                    🏢 Facturile Administratorului
+                    🏢 Facturi
                 </button>
             </div>
 

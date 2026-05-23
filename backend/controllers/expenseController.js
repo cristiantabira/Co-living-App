@@ -384,6 +384,12 @@ const getExpensesByType = async (req, res) => {
                     attributes: ["id", "name"],
                     through: { attributes: ["amountOwed", "isSettled"] },
                 },
+                {
+                    model: Complex,
+                    as: "Complex",
+                    attributes: ["id", "name"],
+                    required: false,
+                },
             ],
             order: [["createdAt", "DESC"]],
         });
