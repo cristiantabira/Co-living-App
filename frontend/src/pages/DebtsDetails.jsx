@@ -2,17 +2,19 @@ import { useEffect, useState } from 'react';
 import API from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 import MainLayout from '../components/MainLayout';
+import StripePaymentModal from '../components/StripePaymentModal';
 
 function DebtsDetails() {
     const [debtsTo, setDebtsTo] = useState([]);
     const [creditsFrom, setCreditsFrom] = useState([]);
     const [settledByNetting, setSettledByNetting] = useState([]);
+    const [paymentHistory, setPaymentHistory] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedDebt, setExpandedDebt] = useState(null);
     const [expandedCredit, setExpandedCredit] = useState(null);
     const [reminderSending, setReminderSending] = useState(null);
-    const [paymentModal, setPaymentModal] = useState({ isOpen: false, amount: '', totalDebt: 0 });
+    const [stripePaymentModal, setStripePaymentModal] = useState({ isOpen: false, amount: 0 });
     const [paying, setPaying] = useState(false);
     const navigate = useNavigate();
 
@@ -28,6 +30,14 @@ function DebtsDetails() {
             setCreditsFrom(data.creditsFrom || []);
             setSettledByNetting(data.settledByNetting || []);
             setError('');
+
+            // Fetch payment history
+            try {
+                const historyResponse = await API.get('/expenses/payment-history');
+                setPaymentHistory(historyResponse.data || []);
+            } catch (historyErr) {
+                console.error('Eroare la preluarea istoricului de plăți:', historyErr);
+            }
         } catch (err) {
             console.error('Eroare la preluarea datoriilor:', err);
             if (err.response?.status === 401) {
@@ -50,34 +60,6 @@ function DebtsDetails() {
             alert('Eroare: ' + (err.response?.data?.message || err.message));
         } finally {
             setReminderSending(null);
-        }
-    };
-
-    const handleMakePayment = async () => {
-        try {
-            const paymentAmount = parseFloat(paymentModal.amount);
-            if (!paymentAmount || paymentAmount <= 0) {
-                alert('Te rog introdu o sumă validă');
-                return;
-            }
-
-            if (paymentAmount > paymentModal.totalDebt) {
-                alert(`Suma nu poate depăși datoriei: ${paymentModal.totalDebt.toFixed(2)} lei`);
-                return;
-            }
-
-            setPaying(true);
-            const { data } = await API.post('/expenses/settle-debt', {
-                amount: paymentAmount
-            });
-
-            alert(data.message);
-            setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 });
-            await fetchDebtsDetails(); // Reîncarcă datele
-        } catch (err) {
-            alert('Eroare la plată: ' + (err.response?.data?.message || err.message));
-        } finally {
-            setPaying(false);
         }
     };
 
@@ -192,10 +174,9 @@ function DebtsDetails() {
 
                                             <div style={actionButtonsStyle}>
                                                 <button
-                                                    onClick={() => setPaymentModal({ 
+                                                    onClick={() => setStripePaymentModal({ 
                                                         isOpen: true, 
-                                                        amount: '', 
-                                                        totalDebt: debt.totalAmount 
+                                                        amount: debt.totalAmount 
                                                     })}
                                                     style={payButtonStyle}
                                                 >
@@ -296,13 +277,13 @@ function DebtsDetails() {
                             )}
                         </section>
 
-                        {/* TRANSACȚII COMPENSATE */}
+                        {/* TRANZACȚII COMPLETATE (NETTING) */}
                         {settledByNetting.length > 0 && (
                             <section style={sectionStyle}>
                                 <div style={sectionHeaderStyle}>
                                     <span style={sectionTitleStyle}>
                                         <span style={badgeStyle('var(--primary)')}>✓</span>
-                                        Tranzacții Compensate (Platite automat)
+                                        Tranzacții Completate (Compensate prin datorii reciproce)
                                     </span>
                                 </div>
                                 <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
@@ -315,7 +296,7 @@ function DebtsDetails() {
                                                         {tx.between[0]} ↔ {tx.between[1]}
                                                     </p>
                                                     <p style={{margin: '0', fontSize: '13px', color: 'var(--text-muted)'}}>
-                                                        Datorie reciprocă netted (compensată)
+                                                        Datorie reciprocă compensată automat
                                                     </p>
                                                 </div>
                                             </div>
@@ -330,44 +311,54 @@ function DebtsDetails() {
                     </>
                 )}
 
-                {/* PAYMENT MODAL */}
-                {paymentModal.isOpen && (
-                    <div style={modalOverlayStyle} onClick={() => setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 })}>
-                        <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
-                            <h2 style={modalTitleStyle}>Efectuează Plată</h2>
-                            <p style={modalDescStyle}>
-                                Introdu suma pe care vrei să o plătești din totalul de {paymentModal.totalDebt.toFixed(2)} lei
-                            </p>
-                            
-                            <input
-                                type="number"
-                                value={paymentModal.amount}
-                                onChange={(e) => setPaymentModal({ ...paymentModal, amount: e.target.value })}
-                                placeholder="Suma în lei"
-                                step="0.01"
-                                min="0"
-                                max={paymentModal.totalDebt}
-                                style={modalInputStyle}
-                            />
-
-                            <div style={modalButtonsStyle}>
-                                <button
-                                    onClick={() => setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 })}
-                                    style={modalCancelButtonStyle}
-                                >
-                                    Anulează
-                                </button>
-                                <button
-                                    onClick={handleMakePayment}
-                                    disabled={paying || !paymentModal.amount}
-                                    style={{...modalConfirmButtonStyle, opacity: paying || !paymentModal.amount ? 0.6 : 1, cursor: paying || !paymentModal.amount ? 'not-allowed' : 'pointer'}}
-                                >
-                                    {paying ? '⏳ Se procesează...' : '✓ Confirmă Plată'}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                {/* ISTORIC PLĂȚI COMPLETATE */}
+                {paymentHistory.length > 0 && (
+                    <section style={sectionStyle}>
+                       <div style={sectionHeaderStyle}>
+                           <span style={sectionTitleStyle}>
+                               <span style={badgeStyle('var(--success)')}>📜</span>
+                               Istoric Plăți
+                           </span>
+                       </div>
+                       <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
+                           {paymentHistory.map((payment, idx) => {
+                               const date = new Date(payment.settledAt);
+                               const dateStr = date.toLocaleDateString('ro-RO', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                               const timeStr = date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+                                
+                               return (
+                                   <div key={idx} style={paymentHistoryItemStyle}>
+                                       <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
+                                           <span style={{fontSize: '20px'}}>💳</span>
+                                           <div>
+                                               <p style={{margin: '0', fontWeight: '600', color: 'var(--text-main)'}}>
+                                                   {payment.from} → {payment.to === 'You' ? 'Tu' : payment.to}
+                                               </p>
+                                               <p style={{margin: '0', fontSize: '13px', color: 'var(--text-muted)'}}>
+                                                   {payment.description} • {dateStr} {timeStr}
+                                               </p>
+                                           </div>
+                                       </div>
+                                       <span style={{fontSize: '16px', fontWeight: '700', color: 'var(--success)'}}>
+                                           {payment.amount.toFixed(2)} lei
+                                       </span>
+                                   </div>
+                               );
+                           })}
+                       </div>
+                    </section>
                 )}
+
+                {/* STRIPE PAYMENT MODAL */}
+                <StripePaymentModal 
+                    isOpen={stripePaymentModal.isOpen}
+                    amount={stripePaymentModal.amount}
+                    onClose={() => setStripePaymentModal({ isOpen: false, amount: 0 })}
+                    onSuccess={() => {
+                        fetchDebtsDetails();
+                        setStripePaymentModal({ isOpen: false, amount: 0 });
+                    }}
+                />
             </div>
         </MainLayout>
     );
@@ -462,6 +453,18 @@ const settledTransactionStyle = {
     border: '1px solid #86efac',
     borderRadius: '8px',
     gap: '12px',
+};
+
+const paymentHistoryItemStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 16px',
+    backgroundColor: '#f8f9fa',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    gap: '12px',
+    transition: 'background-color 0.2s',
 };
 
 // STYLE DEFINITIONS
