@@ -6,11 +6,14 @@ import MainLayout from '../components/MainLayout';
 function DebtsDetails() {
     const [debtsTo, setDebtsTo] = useState([]);
     const [creditsFrom, setCreditsFrom] = useState([]);
+    const [settledByNetting, setSettledByNetting] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [expandedDebt, setExpandedDebt] = useState(null);
     const [expandedCredit, setExpandedCredit] = useState(null);
     const [reminderSending, setReminderSending] = useState(null);
+    const [paymentModal, setPaymentModal] = useState({ isOpen: false, amount: '', totalDebt: 0 });
+    const [paying, setPaying] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -23,6 +26,7 @@ function DebtsDetails() {
             const { data } = await API.get('/expenses/debts-details');
             setDebtsTo(data.debtsTo || []);
             setCreditsFrom(data.creditsFrom || []);
+            setSettledByNetting(data.settledByNetting || []);
             setError('');
         } catch (err) {
             console.error('Eroare la preluarea datoriilor:', err);
@@ -46,6 +50,34 @@ function DebtsDetails() {
             alert('Eroare: ' + (err.response?.data?.message || err.message));
         } finally {
             setReminderSending(null);
+        }
+    };
+
+    const handleMakePayment = async () => {
+        try {
+            const paymentAmount = parseFloat(paymentModal.amount);
+            if (!paymentAmount || paymentAmount <= 0) {
+                alert('Te rog introdu o sumă validă');
+                return;
+            }
+
+            if (paymentAmount > paymentModal.totalDebt) {
+                alert(`Suma nu poate depăși datoriei: ${paymentModal.totalDebt.toFixed(2)} lei`);
+                return;
+            }
+
+            setPaying(true);
+            const { data } = await API.post('/expenses/settle-debt', {
+                amount: paymentAmount
+            });
+
+            alert(data.message);
+            setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 });
+            await fetchDebtsDetails(); // Reîncarcă datele
+        } catch (err) {
+            alert('Eroare la plată: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setPaying(false);
         }
     };
 
@@ -160,7 +192,11 @@ function DebtsDetails() {
 
                                             <div style={actionButtonsStyle}>
                                                 <button
-                                                    onClick={() => alert(`Integrare plată pentru ${debt.personName}: ${debt.totalAmount.toFixed(2)} lei`)}
+                                                    onClick={() => setPaymentModal({ 
+                                                        isOpen: true, 
+                                                        amount: '', 
+                                                        totalDebt: debt.totalAmount 
+                                                    })}
                                                     style={payButtonStyle}
                                                 >
                                                     💳 Plătește Acum
@@ -259,12 +295,174 @@ function DebtsDetails() {
                                 </div>
                             )}
                         </section>
+
+                        {/* TRANSACȚII COMPENSATE */}
+                        {settledByNetting.length > 0 && (
+                            <section style={sectionStyle}>
+                                <div style={sectionHeaderStyle}>
+                                    <span style={sectionTitleStyle}>
+                                        <span style={badgeStyle('var(--primary)')}>✓</span>
+                                        Tranzacții Compensate (Platite automat)
+                                    </span>
+                                </div>
+                                <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+                                    {settledByNetting.map((tx, idx) => (
+                                        <div key={idx} style={settledTransactionStyle}>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: '12px', flex: 1}}>
+                                                <span style={{fontSize: '20px'}}>✓</span>
+                                                <div>
+                                                    <p style={{margin: '0', fontWeight: '600', color: 'var(--text-main)'}}>
+                                                        {tx.between[0]} ↔ {tx.between[1]}
+                                                    </p>
+                                                    <p style={{margin: '0', fontSize: '13px', color: 'var(--text-muted)'}}>
+                                                        Datorie reciprocă netted (compensată)
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span style={{fontSize: '18px', fontWeight: '700', color: 'var(--success)'}}>
+                                                {tx.amount.toFixed(2)} lei
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
                     </>
+                )}
+
+                {/* PAYMENT MODAL */}
+                {paymentModal.isOpen && (
+                    <div style={modalOverlayStyle} onClick={() => setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 })}>
+                        <div style={modalContentStyle} onClick={(e) => e.stopPropagation()}>
+                            <h2 style={modalTitleStyle}>Efectuează Plată</h2>
+                            <p style={modalDescStyle}>
+                                Introdu suma pe care vrei să o plătești din totalul de {paymentModal.totalDebt.toFixed(2)} lei
+                            </p>
+                            
+                            <input
+                                type="number"
+                                value={paymentModal.amount}
+                                onChange={(e) => setPaymentModal({ ...paymentModal, amount: e.target.value })}
+                                placeholder="Suma în lei"
+                                step="0.01"
+                                min="0"
+                                max={paymentModal.totalDebt}
+                                style={modalInputStyle}
+                            />
+
+                            <div style={modalButtonsStyle}>
+                                <button
+                                    onClick={() => setPaymentModal({ isOpen: false, amount: '', totalDebt: 0 })}
+                                    style={modalCancelButtonStyle}
+                                >
+                                    Anulează
+                                </button>
+                                <button
+                                    onClick={handleMakePayment}
+                                    disabled={paying || !paymentModal.amount}
+                                    style={{...modalConfirmButtonStyle, opacity: paying || !paymentModal.amount ? 0.6 : 1, cursor: paying || !paymentModal.amount ? 'not-allowed' : 'pointer'}}
+                                >
+                                    {paying ? '⏳ Se procesează...' : '✓ Confirmă Plată'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         </MainLayout>
     );
 }
+
+// MODAL STYLES
+const modalOverlayStyle = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+    backdropFilter: 'blur(4px)',
+};
+
+const modalContentStyle = {
+    backgroundColor: 'white',
+    borderRadius: '16px',
+    padding: '32px',
+    maxWidth: '400px',
+    width: '90%',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+    animation: 'slideIn 0.3s ease-out',
+};
+
+const modalTitleStyle = {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: 'var(--text-main)',
+    margin: '0 0 12px 0',
+};
+
+const modalDescStyle = {
+    fontSize: '14px',
+    color: 'var(--text-muted)',
+    margin: '0 0 24px 0',
+    lineHeight: '1.5',
+};
+
+const modalInputStyle = {
+    width: '100%',
+    padding: '12px 16px',
+    fontSize: '16px',
+    border: '2px solid var(--border)',
+    borderRadius: '8px',
+    marginBottom: '24px',
+    boxSizing: 'border-box',
+    transition: 'border-color 0.2s',
+};
+
+const modalButtonsStyle = {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end',
+};
+
+const modalCancelButtonStyle = {
+    padding: '10px 24px',
+    fontSize: '14px',
+    border: '1px solid var(--border)',
+    borderRadius: '8px',
+    backgroundColor: 'white',
+    color: 'var(--text-main)',
+    cursor: 'pointer',
+    fontWeight: '600',
+    transition: 'all 0.2s',
+};
+
+const modalConfirmButtonStyle = {
+    padding: '10px 24px',
+    fontSize: '14px',
+    border: 'none',
+    borderRadius: '8px',
+    backgroundColor: 'var(--success)',
+    color: 'white',
+    cursor: 'pointer',
+    fontWeight: '600',
+    transition: 'all 0.2s',
+};
+
+const settledTransactionStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px',
+    backgroundColor: '#f0fdf4',
+    border: '1px solid #86efac',
+    borderRadius: '8px',
+    gap: '12px',
+};
 
 // STYLE DEFINITIONS
 const containerStyle = {
