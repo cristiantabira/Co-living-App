@@ -10,6 +10,7 @@ function DebtsDetails() {
     const [error, setError] = useState('');
     const [expandedDebt, setExpandedDebt] = useState(null);
     const [expandedCredit, setExpandedCredit] = useState(null);
+    const [reminderSending, setReminderSending] = useState(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -32,6 +33,19 @@ function DebtsDetails() {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSendReminder = async (debtId, isCredit = false) => {
+        try {
+            setReminderSending(debtId);
+            const endpoint = isCredit ? '/expenses/send-reminder-credit' : '/expenses/send-reminder';
+            const { data } = await API.post(endpoint, { debtId });
+            alert(data.message);
+        } catch (err) {
+            alert('Eroare: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setReminderSending(null);
         }
     };
 
@@ -200,12 +214,28 @@ function DebtsDetails() {
                                                 {expandedCredit === credit.personId ? '▼' : '▶'} Detalii
                                             </button>
 
-                                            {expandedCredit === credit.personId && (
+                            {expandedCredit === credit.personId && (
                                                 <div style={detailsStyle}>
                                                     {credit.details.map((d, idx) => (
-                                                        <div key={idx} style={detailItemStyle}>
-                                                            <span style={detailDescriptionStyle}>{d.description}</span>
-                                                            <span style={detailAmountStyle}>{d.amount.toFixed(2)} lei</span>
+                                                        <div key={idx} style={{...detailItemStyle, flexDirection: 'column', alignItems: 'flex-start', gap: '8px'}}>
+                                                            <div style={{width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                                                                <span style={detailDescriptionStyle}>{d.description}</span>
+                                                                <span style={detailAmountStyle}>{d.amount.toFixed(2)} lei</span>
+                                                            </div>
+                                                            <button
+                                                                onClick={() => handleSendReminder(d.debtId, true)}
+                                                                disabled={reminderSending === d.debtId}
+                                                                style={{
+                                                                    ...reminderButtonStyle,
+                                                                    width: '100%',
+                                                                    padding: '6px 12px',
+                                                                    fontSize: '12px',
+                                                                    opacity: reminderSending === d.debtId ? 0.6 : 1,
+                                                                    cursor: reminderSending === d.debtId ? 'not-allowed' : 'pointer'
+                                                                }}
+                                                            >
+                                                                {reminderSending === d.debtId ? '⏳ Se trimite...' : '🔔 Reaminteste să plătească'}
+                                                            </button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -213,10 +243,15 @@ function DebtsDetails() {
 
                                             <div style={actionButtonsStyle}>
                                                 <button
-                                                    onClick={() => alert(`Notificare trimisă către ${credit.personName}`)}
-                                                    style={reminderButtonStyle}
+                                                    onClick={() => {
+                                                        const detailsText = credit.details
+                                                            .map((d) => `• ${d.description}: ${d.amount.toFixed(2)} lei`)
+                                                            .join('\n');
+                                                        alert(`${credit.personName} ți datorează:\n\n${detailsText}\n\nTotal: ${credit.totalAmount.toFixed(2)} lei`);
+                                                    }}
+                                                    style={{...reminderButtonStyle, background: 'var(--primary)'}}
                                                 >
-                                                    🔔 Remind
+                                                    👁️ Vezi Rezumat
                                                 </button>
                                             </div>
                                         </div>

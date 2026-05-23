@@ -3,11 +3,15 @@ const User = require("../models/User");
 const Apartment = require("../models/Apartment");
 const Complex = require("../models/Complex");
 const { Op } = require("sequelize");
+const { notifyAllDebtors, sendPaymentReminder } = require("../services/emailService");
 
 const createExpense = async (req, res) => {
     try {
         const { description, totalAmount, category, debtors } = req.body;
         // debtors ar trebui să fie un array de obiecte: [{ userId: 1, amountOwed: 50 }, { userId: 2, amountOwed: 50 }]
+
+        // Obținem informații despre utilizatorul curent (Payer)
+        const payer = await User.findByPk(req.user.id);
 
         // 1. Creăm cheltuiala (payerId vine din middleware-ul protect)
         const expense = await Expense.create({
@@ -29,6 +33,20 @@ const createExpense = async (req, res) => {
             }));
 
             await ExpenseDebt.bulkCreate(debtEntries);
+
+            // 3. Trimitem notificări prin email tuturor debtorilor
+            const debtorUsers = await User.findAll({
+                where: { id: debtors.map(d => d.userId) }
+            });
+
+            // Trimitem emailuri asincron (nu blocăm răspunsul)
+            notifyAllDebtors(
+                debtorUsers,
+                payer.name,
+                description,
+                totalAmount,
+                'PERSONAL'
+            ).catch(err => console.error('Eroare la trimitere email-uri:', err));
         }
 
         res.status(201).json({
@@ -52,6 +70,7 @@ const createAdminBill = async (req, res) => {
         }
 
         let debtors = [];
+        let debtorUsers = [];
 
         if (scopeType === "COMPLEX") {
             // Găsim apartamentele cu > 0 locuitori
@@ -60,7 +79,7 @@ const createAdminBill = async (req, res) => {
                 include: [
                     {
                         model: User,
-                        attributes: ["id"],
+                        attributes: ["id", "name", "email"],
                         required: false
                     }
                 ]
@@ -83,13 +102,14 @@ const createAdminBill = async (req, res) => {
                         userId: user.id,
                         amountOwed: amountPerResident
                     });
+                    debtorUsers.push(user);
                 });
             });
         } else if (scopeType === "APARTMENT") {
             // Găsim locatarii din apartament
             const residents = await User.findAll({
                 where: { apartmentId: scopeId },
-                attributes: ["id"]
+                attributes: ["id", "name", "email"]
             });
 
             if (residents.length === 0) {
@@ -102,6 +122,7 @@ const createAdminBill = async (req, res) => {
                     userId: user.id,
                     amountOwed: amountPerResident
                 });
+                debtorUsers.push(user);
             });
         }
 
@@ -136,6 +157,16 @@ const createAdminBill = async (req, res) => {
         }));
 
         await ExpenseDebt.bulkCreate(debtEntries);
+
+        // Trimitem notificări prin email tuturor debtorilor (asincron)
+        const admin = await User.findByPk(adminId);
+        notifyAllDebtors(
+            debtorUsers,
+            admin.name,
+            description,
+            totalAmount,
+            'ADMIN'
+        ).catch(err => console.error('Eroare la trimitere email-uri:', err));
 
         res.status(201).json({
             message: `Factură administrativă creată și distribuită la ${debtors.length} locatari!`,
@@ -414,6 +445,124 @@ const getExpensesByType = async (req, res) => {
     }
 };
 
+// Endpoint pentru a trimite reminder de plată unui debtor (De platit)
+const sendPaymentReminderEndpoint = async (req, res) => {
+    try {
+        const { debtId } = req.body;
+        const creditorId = req.user.id;
+
+        // Obținem informații despre datorie și debtor
+        const debt = await ExpenseDebt.findByPk(debtId, {
+            include: [
+                {
+                    model: Expense,
+                    attributes: ["id", "description", "totalAmount"],
+                    include: [
+                        {
+                            model: User,
+                            as: "Payer",
+                            attributes: ["id", "name", "email"],
+                        }
+                    ]
+                },
+                {
+                    model: User,
+                    attributes: ["id", "name", "email"]
+                }
+            ]
+        });
+
+        if (!debt) {
+            return res.status(404).json({ message: "Datoria nu a fost găsită" });
+        }
+
+        // Verificare: doar debitorul primește reminder (utilizatorul curent trebuie să fie cel care datorează)
+        if (debt.userId !== creditorId) {
+            return res.status(403).json({ message: "Nu poți primi reminder pentru o datorie care nu ți-o datorezi" });
+        }
+
+        // Trimitem reminder
+        const debtor = debt.User;
+        const creditor = debt.Expense.Payer;
+        const expense = debt.Expense;
+
+        await sendPaymentReminder(
+            debtor.email,
+            debtor.name,
+            creditor.name,
+            debt.amountOwed.toFixed(2),
+            expense.description
+        );
+
+        res.json({
+            message: `Reminder trimis cu succes lui ${debtor.name}!`,
+            debtId: debt.id,
+        });
+    } catch (error) {
+        console.error("Eroare la trimitere reminder:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
+// Endpoint pentru a trimite reminder de recuperare unui debitor (De recuperat)
+const sendPaymentReminderForCredit = async (req, res) => {
+    try {
+        const { debtId } = req.body;
+        const payerId = req.user.id;
+
+        // Obținem informații despre datorie
+        const debt = await ExpenseDebt.findByPk(debtId, {
+            include: [
+                {
+                    model: Expense,
+                    attributes: ["id", "description", "totalAmount"],
+                    include: [
+                        {
+                            model: User,
+                            as: "Payer",
+                            attributes: ["id", "name", "email"],
+                        }
+                    ]
+                },
+                {
+                    model: User,
+                    attributes: ["id", "name", "email"]
+                }
+            ]
+        });
+
+        if (!debt) {
+            return res.status(404).json({ message: "Datoria nu a fost găsită" });
+        }
+
+        // Verificare: doar cel care a plătit inițial poate trimite reminder
+        if (debt.Expense.payerId !== payerId) {
+            return res.status(403).json({ message: "Nu poți trimite reminder pentru o datorie care nu ți-o datorează" });
+        }
+
+        // Trimitem reminder către cel care datorează
+        const debtor = debt.User;
+        const creditor = debt.Expense.Payer;
+        const expense = debt.Expense;
+
+        await sendPaymentReminder(
+            debtor.email,
+            debtor.name,
+            creditor.name,
+            debt.amountOwed.toFixed(2),
+            expense.description
+        );
+
+        res.json({
+            message: `Reminder trimis cu succes lui ${debtor.name}!`,
+            debtId: debt.id,
+        });
+    } catch (error) {
+        console.error("Eroare la trimitere reminder pentru credit:", error);
+        res.status(500).json({ error: error.message });
+    }
+};
+
 module.exports = {
     createExpense,
     createAdminBill,
@@ -423,4 +572,6 @@ module.exports = {
     settleDebt,
     getDebtsDetails,
     getExpensesByType,
+    sendPaymentReminderEndpoint,
+    sendPaymentReminderForCredit,
 };
