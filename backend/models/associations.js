@@ -47,6 +47,10 @@ const setupAssociations = () => {
     ExpenseDebt.belongsTo(Expense, { foreignKey: "expenseId" });
     Expense.hasMany(ExpenseDebt, { foreignKey: "expenseId" });
 
+    // Permitem accesul direct de la ExpenseDebt la User (debtor)
+    ExpenseDebt.belongsTo(User, { foreignKey: "userId" });
+    User.hasMany(ExpenseDebt, { foreignKey: "userId" });
+
     // 6. Complex <-> Admini (Many-to-Many)
     Complex.belongsToMany(User, {
         through: ComplexAdmin,

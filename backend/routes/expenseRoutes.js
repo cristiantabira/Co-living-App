@@ -10,6 +10,7 @@ const {
     getExpensesByType,
     sendPaymentReminderEndpoint,
     sendPaymentReminderForCredit,
+    settleDebt,
 } = require("../controllers/expenseController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 
@@ -24,6 +25,7 @@ router.get("/debts-details", getDebtsDetails);
 router.get("/by-type", getExpensesByType);
 router.post("/send-reminder", sendPaymentReminderEndpoint);
 router.post("/send-reminder-credit", sendPaymentReminderForCredit);
+router.post("/settle-debt", settleDebt);
 
 // Admin billing - doar ADMIN si GOD
 router.post("/admin/bill", authorize("ADMIN", "GOD"), createAdminBill);

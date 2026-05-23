@@ -271,19 +271,76 @@ const getExpenseHistory = async (req, res) => {
 
 const settleDebt = async (req, res) => {
     try {
-        const { debtId } = req.params;
-        const debt = await ExpenseDebt.findByPk(debtId);
+        const userId = req.user.id;
+        const { amount } = req.body;
 
-        if (!debt)
-            return res
-                .status(404)
-                .json({ message: "Datoria nu a fost găsită" });
+        if (!amount || amount <= 0) {
+            return res.status(400).json({ message: "Suma de plată trebuie să fie mai mare decât 0" });
+        }
 
-        debt.isSettled = true;
-        await debt.save();
+        // Găsim toate datoriile neachitate, sortate după dată (cele mai vechi primele - FIFO)
+        const myDebts = await ExpenseDebt.findAll({
+            where: { 
+                userId: userId, 
+                isSettled: false 
+            },
+            include: [
+                {
+                    model: Expense,
+                    attributes: ["id", "description", "createdAt"]
+                }
+            ],
+            order: [[Expense, "createdAt", "ASC"]] // Cele mai vechi datorii primele
+        });
 
-        res.json({ message: "Datorie achitată cu succes!" });
+        if (myDebts.length === 0) {
+            return res.status(404).json({ message: "Nu ai datorii neachitate" });
+        }
+
+        let remainingAmount = parseFloat(amount);
+        const settledDebts = [];
+        const partiallyReducedDebts = [];
+
+        // Aplicăm plata pe fiecare datorie în ordine
+        for (const debt of myDebts) {
+            if (remainingAmount <= 0) break;
+
+            if (remainingAmount >= debt.amountOwed) {
+                // Plata acoperă în întregime această datorie
+                remainingAmount -= debt.amountOwed;
+                debt.amountOwed = 0;
+                debt.isSettled = true;
+                settledDebts.push(debt);
+            } else {
+                // Plata acoperă doar parțial această datorie
+                debt.amountOwed -= remainingAmount;
+                remainingAmount = 0;
+                partiallyReducedDebts.push(debt);
+            }
+
+            await debt.save();
+        }
+
+        res.json({
+            message: `Plată de ${amount} lei aplicată cu succes!`,
+            summary: {
+                totalPaid: amount,
+                debtSettled: settledDebts.length,
+                debtPartiallyReduced: partiallyReducedDebts.length,
+                settledDebts: settledDebts.map(d => ({
+                    id: d.id,
+                    description: d.Expense.description,
+                    wasPaid: d.amountOwed
+                })),
+                partiallyReduced: partiallyReducedDebts.map(d => ({
+                    id: d.id,
+                    description: d.Expense.description,
+                    remainingDebt: d.amountOwed.toFixed(2)
+                }))
+            }
+        });
     } catch (error) {
+        console.error("Eroare la plată:", error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -319,7 +376,7 @@ const getDebtsDetails = async (req, res) => {
                     model: User,
                     as: "Debtors",
                     attributes: ["id", "name"],
-                    through: { attributes: ["amountOwed", "isSettled"] },
+                    through: { attributes: ["amountOwed", "isSettled", "id"] }, // Include ExpenseDebt.id
                 },
             ],
         });
@@ -365,7 +422,7 @@ const getDebtsDetails = async (req, res) => {
                     }
                     creditsByPerson[key].totalAmount += parseFloat(debtor.ExpenseDebt.amountOwed);
                     creditsByPerson[key].credits.push({
-                        debtId: debtor.ExpenseDebt.id,
+                        debtId: debtor.ExpenseDebt.id, // Use ExpenseDebt.id from through model
                         expenseId: expense.id,
                         description: expense.description,
                         amount: debtor.ExpenseDebt.amountOwed,
@@ -375,19 +432,91 @@ const getDebtsDetails = async (req, res) => {
             });
         });
 
-        res.json({
-            debtsTo: Object.values(debtsByPerson).map((d) => ({
+        // ===== DEBT NETTING LOGIC =====
+        // Compensare datorii reciproce: Dacă A datorează B 8150 și B datorează A 150, net: A datorează B 8000
+        const netDebtsByPerson = {};
+        const netCreditsByPerson = {};
+        const settledTransactions = [];
+
+        // Copiem toate datoriile și creditele
+        Object.keys(debtsByPerson).forEach(key => {
+            netDebtsByPerson[key] = JSON.parse(JSON.stringify(debtsByPerson[key]));
+        });
+        Object.keys(creditsByPerson).forEach(key => {
+            netCreditsByPerson[key] = JSON.parse(JSON.stringify(creditsByPerson[key]));
+        });
+
+        // Compensare reciprocă
+        Object.keys(netDebtsByPerson).forEach(debtorKey => {
+            const debtor = netDebtsByPerson[debtorKey];
+            const creditorKey = debtor.personId;
+
+            if (netCreditsByPerson[creditorKey]) {
+                const credit = netCreditsByPerson[creditorKey];
+                const minAmount = Math.min(debtor.totalAmount, credit.totalAmount);
+
+                // Marcăm ce se compensează
+                const compensated = {
+                    between: [debtor.personName, credit.personName],
+                    amount: minAmount,
+                    type: 'NETTING'
+                };
+                settledTransactions.push(compensated);
+
+                // Scădem din ambele
+                debtor.totalAmount -= minAmount;
+                credit.totalAmount -= minAmount;
+
+                // Reducere proporțională din detalii
+                let remaining = minAmount;
+                for (let debt of debtor.debts) {
+                    if (remaining <= 0) break;
+                    const reduce = Math.min(debt.amount, remaining);
+                    debt.amount -= reduce;
+                    remaining -= reduce;
+                }
+                debtor.debts = debtor.debts.filter(d => d.amount > 0.01);
+
+                remaining = minAmount;
+                for (let cred of credit.credits) {
+                    if (remaining <= 0) break;
+                    const reduce = Math.min(cred.amount, remaining);
+                    cred.amount -= reduce;
+                    remaining -= reduce;
+                }
+                credit.credits = credit.credits.filter(c => c.amount > 0.01);
+            }
+        });
+
+        // Filtrare: pastram doar datorii/credite cu sold > 0
+        const finalDebts = Object.values(netDebtsByPerson)
+            .filter(d => d.totalAmount > 0.01)
+            .map((d) => ({
                 personId: d.personId,
                 personName: d.personName,
                 totalAmount: parseFloat(d.totalAmount.toFixed(2)),
-                details: d.debts,
-            })),
-            creditsFrom: Object.values(creditsByPerson).map((c) => ({
+                details: d.debts.map(debt => ({
+                    ...debt,
+                    amount: parseFloat(debt.amount.toFixed(2))
+                })),
+            }));
+
+        const finalCredits = Object.values(netCreditsByPerson)
+            .filter(c => c.totalAmount > 0.01)
+            .map((c) => ({
                 personId: c.personId,
                 personName: c.personName,
                 totalAmount: parseFloat(c.totalAmount.toFixed(2)),
-                details: c.credits,
-            })),
+                details: c.credits.map(credit => ({
+                    ...credit,
+                    amount: parseFloat(credit.amount.toFixed(2))
+                })),
+            }));
+
+        res.json({
+            debtsTo: finalDebts,
+            creditsFrom: finalCredits,
+            settledByNetting: settledTransactions, // Tranzacții compensate
         });
     } catch (error) {
         console.error("Eroare la getDebtsDetails:", error);
@@ -515,7 +644,7 @@ const sendPaymentReminderForCredit = async (req, res) => {
             include: [
                 {
                     model: Expense,
-                    attributes: ["id", "description", "totalAmount"],
+                    attributes: ["id", "description", "totalAmount", "payerId"],
                     include: [
                         {
                             model: User,
