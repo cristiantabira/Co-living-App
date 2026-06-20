@@ -165,18 +165,73 @@ Associations are centralized in `backend/models/associations.js` and must be cal
 - A `seedTenUsers` endpoint exists for development/testing; creates a GOD user and 10 regular users with predictable credentials
 - Run via POST `/api/auth/seed-users`
 
+## Backend Services
+
+### Email Notifications (`backend/services/emailService.js`)
+
+Email notifications are sent for:
+- **New expenses**: Automatically notified when a group expense is created
+- **New bills**: Administrative bills notify all apartment residents
+- **Payment reminders**: Sent when a creditor requests a reminder for a pending debt
+
+**Setup**: See `backend/EMAIL_SETUP.md` for Mailtrap, MailPit, or Gmail configuration. Set environment variables:
+- `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`, `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_FROM`
+
+**Key endpoint**: `POST /api/expenses/send-reminder` (send payment reminder to a debtor)
+
+### Payment Processing (`backend/services/paymentService.js`)
+
+Stripe integration for handling payments:
+- `createPaymentIntent(amount, currency, metadata)`: Creates a Stripe PaymentIntent
+- `confirmPaymentIntent(paymentIntentId)`: Retrieves and confirms payment status
+- Environment: `STRIPE_SECRET_KEY` (set in `.env` or `.env.stripe`)
+- Currency default: RON (can be overridden per request)
+
 ## Important Notes
 
 - The codebase has comments and variable names in Romanian; maintain consistency when adding features
-- JWT secret and database credentials should be moved to `.env` file in production
+- JWT secret and database credentials must be in `.env` file (currently hardcoded for development)
+- Email credentials, Stripe keys, and JWT secret should be environment variables
 - No TypeScript; pure JavaScript with Sequelize type inference
 - Vite config uses React plugin; no custom aliases configured
 - ESLint configured for React hooks and refresh rules; respects uppercase variable patterns
 
+## Local Development Setup
+
+### Starting the full-stack application:
+
+1. **Backend** (Terminal 1):
+```bash
+cd backend
+npm install
+npm run dev          # Starts on http://localhost:5000
+```
+
+2. **Frontend** (Terminal 2):
+```bash
+cd frontend
+npm install
+npm run dev          # Starts on http://localhost:5173
+```
+
+3. **Optional - Seed test data**:
+```bash
+curl -X POST http://localhost:5000/api/auth/seed-users
+```
+Creates 1 GOD user and 10 regular users with predictable credentials for testing.
+
+### Optional local services:
+
+- **Email Testing**: Run MailPit for local email testing:
+  ```bash
+  mailpit          # Opens at http://localhost:8025
+  ```
+  Then set `EMAIL_HOST=localhost` and `EMAIL_PORT=1025` in `.env`
+
 ## E2E Testing with Playwright
 
 ### Setup
-Playwright is installed as a dev dependency and configured to test the React frontend against http://localhost:5173.
+Playwright is installed as a dev dependency and configured to test the React frontend against http://localhost:5173. Ensure both backend and frontend servers are running before tests.
 
 ### Test Structure
 - **tests/auth.spec.js**: Authentication flows, navigation, and public routes
@@ -212,7 +267,7 @@ npx playwright test --project=chromium
 ### Test Configuration
 - **Base URL**: http://localhost:5173 (frontend dev server)
 - **Browsers**: Chromium, Firefox, WebKit
-- **Screenshots**: Captured on test failure
+- **Screenshots**: Captured on test failure in `test-results/` directory
 - **Retries**: 2 retries in CI, 0 locally
 - **Workers**: Parallel execution (multiple tests at once)
 
@@ -222,3 +277,4 @@ npx playwright test --project=chromium
 - Mock external APIs if needed to avoid flaky tests
 - Keep tests focused: one feature or user flow per test
 - Add tests for critical user journeys (login, add expense, view dashboard)
+- Run `npm run test:report` to debug test failures with screenshots

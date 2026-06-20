@@ -7,6 +7,8 @@ const authRoutes = require("./routes/authRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const aptRoutes = require("./routes/aptRoutes");
 const taskRoutes = require("./routes/taskRoutes");
+const ticketRoutes = require("./routes/ticketRoutes");
+const { startTicketScheduler } = require("./services/ticketScheduler");
 const app = express();
 
 app.use(cors());
@@ -15,6 +17,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/expenses", expenseRoutes);
 app.use("/api/apartments", aptRoutes);
 app.use("/api/tasks", taskRoutes);
+app.use("/api/tickets", ticketRoutes);
 
 // Inițializăm relațiile
 setupAssociations();
@@ -28,6 +31,10 @@ sequelize
     })
     .then(() => {
         console.log("🚀 Baza de date SQLite este sincronizată.");
+        
+        // Start ticket auto-close scheduler
+        startTicketScheduler();
+        
         app.listen(5000, () => console.log("Server running on port 5000"));
     })
     .catch((err) => console.error("Eroare la sincronizarea DB:", err));

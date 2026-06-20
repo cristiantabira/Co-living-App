@@ -4,6 +4,7 @@ const Apartment = require("./Apartment");
 const { Expense, ExpenseDebt } = require("./Expense");
 const Complex = require("./Complex");
 const Task = require("./Task");
+const Ticket = require("./Ticket");
 
 const ComplexAdmin = sequelize.define("ComplexAdmin", {});
 
@@ -67,8 +68,18 @@ const setupAssociations = () => {
     Apartment.hasMany(Task, { foreignKey: "apartmentId", as: "Tasks" });
     Task.belongsTo(Apartment, { foreignKey: "apartmentId" });
 
+    // 8. Ticket associations
+    Complex.hasMany(Ticket, { foreignKey: "complexId", as: "Tickets" });
+    Ticket.belongsTo(Complex, { foreignKey: "complexId" });
+
+    User.hasMany(Ticket, { foreignKey: "raisedById", as: "RaisedTickets" });
+    Ticket.belongsTo(User, { foreignKey: "raisedById", as: "RaisedBy" });
+
+    User.hasMany(Ticket, { foreignKey: "assignedToId", as: "AssignedTickets" });
+    Ticket.belongsTo(User, { foreignKey: "assignedToId", as: "AssignedTo" });
+
     console.log(
-        "Toate relațiile au fost configurate, inclusiv Task per Apartament.",
+        "Toate relațiile au fost configurate, inclusiv Task per Apartament și Ticket per Complex.",
     );
 };
 

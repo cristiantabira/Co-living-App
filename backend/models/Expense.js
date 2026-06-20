@@ -6,8 +6,10 @@ const Expense = sequelize.define("Expense", {
     totalAmount: { type: DataTypes.FLOAT, allowNull: false },
     category: { type: DataTypes.STRING }, // Ex: "Utilități", "Mâncare"
     isPaid: { type: DataTypes.BOOLEAN, defaultValue: false },
-    // Para facturas administrativas
-    scopeType: { type: DataTypes.ENUM("PERSONAL", "APARTMENT", "COMPLEX"), defaultValue: "PERSONAL" },
+    scopeType: {
+        type: DataTypes.ENUM("PERSONAL", "APARTMENT", "COMPLEX"),
+        defaultValue: "PERSONAL",
+    },
     // ID de complex sau apartament (pentru facturas admin)
     scopeId: { type: DataTypes.INTEGER, allowNull: true },
     // Marcheaza daca factura e creata de admin (true) sau de user normal (false)

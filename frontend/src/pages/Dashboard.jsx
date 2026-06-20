@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import API from '../api/axios';
 import { useNavigate } from 'react-router-dom';
+import CreateTicketButton from '../components/CreateTicketButton';
+import ReportsPanel from '../components/ReportsPanel';
 
 function Dashboard() {
     const [balance, setBalance] = useState({ toReceive: 0, toPay: 0, balance: 0 });
@@ -157,8 +159,12 @@ function Dashboard() {
                     >
                         📊 Vezi Istoric Cheltuieli
                     </button>
+                    <CreateTicketButton />
                 </div>
             </section>
+
+            {/* Reports Panel - NEW FEATURE */}
+            <ReportsPanel />
 
             {/* Tasks Section */}
             <section>
