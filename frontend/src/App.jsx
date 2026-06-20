@@ -1,42 +1,216 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Activity from './pages/Activity';
-import AddExpense from './pages/AddExpense';
-import Signup from './pages/SignUp';
-import Users from './pages/Users';
-import ManageSpaces from './pages/ManageSpaces';
-import Profile from './pages/Profile';
-import AdminDashboard from './pages/AdminDashboard';
-import DebtsDetails from './pages/DebtsDetails';
-import MainLayout from './components/MainLayout'; // Importăm layout-ul nou
+// import {
+//     BrowserRouter as Router,
+//     Routes,
+//     Route,
+//     Navigate,
+// } from "react-router-dom";
+// import Login from "./pages/Login";
+// import Dashboard from "./pages/Dashboard";
+// import Activity from "./pages/Activity";
+// import AddExpense from "./pages/AddExpense";
+// import Signup from "./pages/SignUp";
+// import Users from "./pages/Users";
+// import ManageSpaces from "./pages/ManageSpaces";
+// import Profile from "./pages/Profile";
+// import AdminDashboard from "./pages/AdminDashboard";
+// import DebtsDetails from "./pages/DebtsDetails";
+// import MainLayout from "./components/MainLayout"; // Importăm layout-ul nou
+
+// function App() {
+//     return (
+//         <Router>
+//             <Routes>
+//                 {/* Rute publice (fără meniu lateral) */}
+//                 <Route path="/login" element={<Login />} />
+//                 <Route path="/signup" element={<Signup />} />
+
+//                 {/* Rute private (Îmbrăcate în MainLayout pentru a avea Sidebar-ul) */}
+//                 <Route
+//                     path="/dashboard"
+//                     element={
+//                         <MainLayout>
+//                             <Dashboard />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route
+//                     path="/profile"
+//                     element={
+//                         <MainLayout>
+//                             <Profile />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route
+//                     path="/activity"
+//                     element={
+//                         <MainLayout>
+//                             <Activity />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route
+//                     path="/add-expense"
+//                     element={
+//                         <MainLayout>
+//                             <AddExpense />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route path="/debts-details" element={<DebtsDetails />} />
+
+//                 {/* Rute de Management */}
+//                 <Route
+//                     path="/users"
+//                     element={
+//                         <MainLayout>
+//                             <Users />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route
+//                     path="/manage-spaces"
+//                     element={
+//                         <MainLayout>
+//                             <ManageSpaces />
+//                         </MainLayout>
+//                     }
+//                 />
+//                 <Route
+//                     path="/admin-dashboard"
+//                     element={
+//                         <MainLayout>
+//                             <AdminDashboard />
+//                         </MainLayout>
+//                     }
+//                 />
+
+//                 {/* Redirecționări și Error Handling */}
+//                 <Route path="/" element={<Navigate to="/login" />} />
+//                 <Route
+//                     path="*"
+//                     element={<h2>404 - Pagina nu a fost găsită</h2>}
+//                 />
+//             </Routes>
+//         </Router>
+//     );
+// }
+
+// export default App;
+import {
+    BrowserRouter as Router,
+    Routes,
+    Route,
+    Navigate,
+} from "react-router-dom";
+import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
+import Activity from "./pages/Activity";
+import AddExpense from "./pages/AddExpense";
+import Signup from "./pages/SignUp";
+import Users from "./pages/Users";
+import ManageSpaces from "./pages/ManageSpaces";
+import Profile from "./pages/Profile";
+import AdminDashboard from "./pages/AdminDashboard";
+import DebtsDetails from "./pages/DebtsDetails";
+import Tickets from "./pages/Tickets";
+import AdminTickets from "./pages/AdminTickets";
+import MainLayout from "./components/MainLayout";
 
 function App() {
-  return (
-    <Router>
-      <Routes>
-        {/* Rute publice (fără meniu lateral) */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
+    return (
+        <Router>
+            <Routes>
+                {/* Rute publice (fără meniu lateral) */}
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
 
-        {/* Rute private (Îmbrăcate în MainLayout pentru a avea Sidebar-ul) */}
-        <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
-        <Route path="/profile" element={<MainLayout><Profile /></MainLayout>} />
-        <Route path="/activity" element={<MainLayout><Activity /></MainLayout>} />
-        <Route path="/add-expense" element={<MainLayout><AddExpense /></MainLayout>} />
-        <Route path="/debts-details" element={<DebtsDetails />} />
-        
-        {/* Rute de Management */}
-        <Route path="/users" element={<MainLayout><Users /></MainLayout>} />
-        <Route path="/manage-spaces" element={<MainLayout><ManageSpaces /></MainLayout>} />
-        <Route path="/admin-dashboard" element={<MainLayout><AdminDashboard /></MainLayout>} />
+                {/* Rute private (Îmbrăcate în MainLayout pentru a avea Sidebar-ul) */}
+                <Route
+                    path="/dashboard"
+                    element={
+                        <MainLayout>
+                            <Dashboard />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/profile"
+                    element={
+                        <MainLayout>
+                            <Profile />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/activity"
+                    element={
+                        <MainLayout>
+                            <Activity />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/add-expense"
+                    element={
+                        <MainLayout>
+                            <AddExpense />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/tickets"
+                    element={
+                        <MainLayout>
+                            <Tickets />
+                        </MainLayout>
+                    }
+                />
+                <Route path="/debts-details" element={<DebtsDetails />} />
 
-        {/* Redirecționări și Error Handling */}
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="*" element={<h2>404 - Pagina nu a fost găsită</h2>} />
-      </Routes>
-    </Router>
-  );
+                {/* Rute de Management */}
+                <Route
+                    path="/users"
+                    element={
+                        <MainLayout>
+                            <Users />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/manage-spaces"
+                    element={
+                        <MainLayout>
+                            <ManageSpaces />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/admin-tickets"
+                    element={
+                        <MainLayout>
+                            <AdminTickets />
+                        </MainLayout>
+                    }
+                />
+                <Route
+                    path="/admin-dashboard"
+                    element={
+                        <MainLayout>
+                            <AdminDashboard />
+                        </MainLayout>
+                    }
+                />
+
+                {/* Redirecționări și Error Handling */}
+                <Route path="/" element={<Navigate to="/login" />} />
+                <Route
+                    path="*"
+                    element={<h2>404 - Pagina nu a fost găsită</h2>}
+                />
+            </Routes>
+        </Router>
+    );
 }
 
 export default App;

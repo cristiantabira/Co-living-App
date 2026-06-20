@@ -115,22 +115,25 @@ const updateUserRole = async (req, res) => {
 const getMe = async (req, res) => {
     try {
         const user = await User.findByPk(req.user.id, {
-            attributes: ["name", "email", "role"],
+            attributes: ["id", "name", "email", "role"],
             include: [
                 {
                     model: Apartment,
-                    // Verifică dacă modelul se numește Complex (cu C mare)
                     include: [{ model: Complex }],
+                },
+                {
+                    model: Complex,
+                    as: "ManagedComplexes", // Asta este cheia! Trebuie să coincidă cu aliasul din associations.js
                 },
             ],
         });
 
         if (!user)
             return res.status(404).json({ message: "Utilizator negăsit" });
-
+        console.log("Date User:", JSON.stringify(user, null, 2));
         res.json(user);
     } catch (error) {
-        console.error("Eroare la /me:", error); // Verifică terminalul de backend pentru detalii!
+        console.error("Eroare la /me:", error);
         res.status(500).json({ error: error.message });
     }
 };
