@@ -1,106 +1,148 @@
-import { useState } from 'react';
-import ReportDownloadButton from './ReportDownloadButton';
+import React, { useState } from "react";
+import API from "../api/axios";
 
 const ReportsPanel = () => {
-  // Mock data - later from backend
-  const [reports] = useState([
-    {
-      id: 1,
-      period: 'Iunie 2026',
-      apartment: 'Apt 304',
-      generatedDate: '2026-06-02',
-      totalAmount: 1250.75,
-      status: 'COMPLETED',
-    },
-    {
-      id: 2,
-      period: 'Mai 2026',
-      apartment: 'Apt 304',
-      generatedDate: '2026-05-03',
-      totalAmount: 980.50,
-      status: 'COMPLETED',
-    },
-  ]);
+    // Setăm luna curentă ca default
+    const [selectedPeriod, setSelectedPeriod] = useState("2026-06");
+    const [loading, setLoading] = useState(false);
 
-  const handleGenerateReport = () => {
-    alert('✓ Raport generat! (Vizual only - backend pending)');
-  };
+    // Lista lunilor pentru dropdown
+    const periods = [
+        { value: "2026-06", label: "Iunie 2026" },
+        { value: "2026-05", label: "Mai 2026" },
+        { value: "2026-04", label: "Aprilie 2026" },
+        { value: "2026-03", label: "Martie 2026" },
+        { value: "2026-02", label: "Februarie 2026" },
+        { value: "2026-01", label: "Ianuarie 2026" },
+    ];
 
-  return (
-    <div style={{
-      backgroundColor: 'white',
-      borderRadius: '8px',
-      border: '1px solid #e5e7eb',
-      padding: '20px',
-      marginBottom: '24px',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3 style={{ margin: 0, color: '#1f2937' }}>📄 Rapoarte Lunare</h3>
-        <button
-          onClick={handleGenerateReport}
-          style={{
-            padding: '8px 14px',
-            backgroundColor: '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '500',
-            transition: 'all 0.2s ease',
-          }}
-          onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
-          onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+    const handleDownload = async () => {
+        const [year, month] = selectedPeriod.split("-");
+
+        try {
+            setLoading(true);
+
+            // Apelăm endpoint-ul tău din backend
+            // IMPORTANT: responseType 'blob' este esențial pentru descărcarea de fișiere PDF!
+            const response = await API.get(
+                `/expenses/report/monthly?year=${year}&month=${month}`,
+                {
+                    responseType: "blob",
+                },
+            );
+
+            // Creăm un link temporar în browser pentru a forța descărcarea
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement("a");
+            link.href = url;
+            link.setAttribute(
+                "download",
+                `Raport_Cheltuieli_${month}_${year}.pdf`,
+            );
+            document.body.appendChild(link);
+            link.click();
+
+            // Curățăm memoria browserului după descărcare
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Eroare la descărcare PDF:", error);
+            alert(
+                "Eroare: Nu s-a putut genera raportul. Verifică dacă ai cheltuieli în această lună.",
+            );
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div
+            style={{
+                backgroundColor: "white",
+                borderRadius: "8px",
+                border: "1px solid #e5e7eb",
+                padding: "20px",
+                marginBottom: "24px",
+            }}
         >
-          + Genereaza Raport
-        </button>
-      </div>
+            <div style={{ marginBottom: "20px" }}>
+                <h3 style={{ margin: 0, color: "#1f2937" }}>
+                    📄 Rapoarte Lunare
+                </h3>
+                <p
+                    style={{
+                        margin: "8px 0 0 0",
+                        fontSize: "14px",
+                        color: "#6b7280",
+                    }}
+                >
+                    Selectează luna pentru a descărca situația cheltuielilor
+                    apartamentului.
+                </p>
+            </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          fontSize: '14px',
-        }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Perioada</th>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Apartament</th>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Total</th>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Generat</th>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Status</th>
-              <th style={{ padding: '10px', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Acțiuni</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.map((report) => (
-              <tr key={report.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <td style={{ padding: '10px', color: '#1f2937' }}>{report.period}</td>
-                <td style={{ padding: '10px', color: '#1f2937' }}>{report.apartment}</td>
-                <td style={{ padding: '10px', color: '#1f2937' }}>{report.totalAmount.toFixed(2)} RON</td>
-                <td style={{ padding: '10px', color: '#6b7280' }}>{report.generatedDate}</td>
-                <td style={{ padding: '10px' }}>
-                  <span style={{
-                    display: 'inline-block',
-                    padding: '4px 8px',
-                    backgroundColor: '#dcfce7',
-                    color: '#166534',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                  }}>
-                    ✓ Gata
-                  </span>
-                </td>
-                <td style={{ padding: '10px' }}>
-                  <ReportDownloadButton reportId={report.period} apartmentName={report.apartment} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+            <div
+                style={{
+                    display: "flex",
+                    gap: "16px",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                }}
+            >
+                <div style={{ flex: 1, minWidth: "200px" }}>
+                    <select
+                        value={selectedPeriod}
+                        onChange={(e) => setSelectedPeriod(e.target.value)}
+                        style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            borderRadius: "6px",
+                            border: "1px solid #d1d5db",
+                            fontSize: "15px",
+                            backgroundColor: "#f9fafb",
+                            color: "#374151",
+                            cursor: "pointer",
+                        }}
+                    >
+                        {periods.map((p) => (
+                            <option key={p.value} value={p.value}>
+                                {p.label}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+
+                <button
+                    onClick={handleDownload}
+                    disabled={loading}
+                    style={{
+                        padding: "10px 20px",
+                        backgroundColor: "#3b82f6",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "6px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontWeight: "500",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "14px",
+                        transition: "all 0.2s ease",
+                        opacity: loading ? 0.7 : 1,
+                        whiteSpace: "nowrap",
+                    }}
+                    onMouseEnter={(e) =>
+                        !loading && (e.target.style.backgroundColor = "#1d4ed8")
+                    }
+                    onMouseLeave={(e) =>
+                        !loading && (e.target.style.backgroundColor = "#3b82f6")
+                    }
+                >
+                    {loading ? "⏳ Se generează..." : "📥 Descarcă PDF"}
+                </button>
+            </div>
+        </div>
+    );
 };
 
 export default ReportsPanel;

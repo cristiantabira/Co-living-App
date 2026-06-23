@@ -8,7 +8,7 @@ const {
     sendPaymentReminder,
 } = require("../services/emailService");
 const { createPaymentIntent } = require("../services/paymentService");
-
+const PDFDocument = require("pdfkit");
 const createExpense = async (req, res) => {
     try {
         const { description, totalAmount, category, debtors } = req.body;
@@ -587,7 +587,13 @@ const getPaymentHistory = async (req, res) => {
             include: [
                 {
                     model: Expense,
-                    attributes: ["id", "description", "totalAmount", "createdAt", "updatedAt"],
+                    attributes: [
+                        "id",
+                        "description",
+                        "totalAmount",
+                        "createdAt",
+                        "updatedAt",
+                    ],
                     include: [
                         {
                             model: User,
@@ -614,7 +620,14 @@ const getPaymentHistory = async (req, res) => {
                     model: User,
                     as: "Debtors",
                     attributes: ["id", "name"],
-                    through: { attributes: ["amountOwed", "isSettled", "updatedAt", "id"] },
+                    through: {
+                        attributes: [
+                            "amountOwed",
+                            "isSettled",
+                            "updatedAt",
+                            "id",
+                        ],
+                    },
                 },
             ],
         });
@@ -624,8 +637,9 @@ const getPaymentHistory = async (req, res) => {
             // Calculez suma plătită - pentru acuratețe, folosesc info inițială
             // Dacă sunt mai mulți debtori, suma pe persoană = totalAmount / debtors count
             const debtorCount = debt.Expense.Debtors.length;
-            const amountPerDebtor = debtorCount > 0 ? debt.Expense.totalAmount / debtorCount : 0;
-            
+            const amountPerDebtor =
+                debtorCount > 0 ? debt.Expense.totalAmount / debtorCount : 0;
+
             return {
                 id: debt.id,
                 type: "MANUAL_PAYMENT",
@@ -647,8 +661,9 @@ const getPaymentHistory = async (req, res) => {
                     // Pentru credite, folosim amountOwed inițial dacă posibil
                     // Dar amountOwed e 0 când settled, deci calculez din totalAmount
                     const debtorCount = expense.Debtors.length;
-                    const amountPerDebtor = debtorCount > 0 ? expense.totalAmount / debtorCount : 0;
-                    
+                    const amountPerDebtor =
+                        debtorCount > 0 ? expense.totalAmount / debtorCount : 0;
+
                     settledCredits.push({
                         id: debtor.ExpenseDebt.id,
                         type: "MANUAL_PAYMENT",
@@ -666,7 +681,7 @@ const getPaymentHistory = async (req, res) => {
 
         // Combinăm și sortez
         const allPayments = [...settledPayments, ...settledCredits].sort(
-            (a, b) => new Date(b.settledAt) - new Date(a.settledAt)
+            (a, b) => new Date(b.settledAt) - new Date(a.settledAt),
         );
 
         res.json(allPayments);
@@ -950,6 +965,263 @@ const sendPaymentReminderForCredit = async (req, res) => {
     }
 };
 
+const removeDiacritics = (str) => {
+    if (!str) return "";
+    return str
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/ș/g, "s")
+        .replace(/ț/g, "t")
+        .replace(/Ș/g, "S")
+        .replace(/Ț/g, "T");
+};
+
+const downloadMonthlyReport = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { year, month } = req.query;
+
+        // Obținem utilizatorul curent pentru a-i pune numele pe raport
+        const user = await User.findByPk(userId);
+
+        const startDate = new Date(year, month - 1, 1);
+        const endDate = new Date(year, month, 0, 23, 59, 59);
+
+        // 1. DATORIILE MELE (Ce am eu de plătit)
+        const myDebts = await ExpenseDebt.findAll({
+            where: { userId: userId },
+            include: [
+                {
+                    model: Expense,
+                    where: {
+                        createdAt: { [Op.between]: [startDate, endDate] },
+                    },
+                    include: [{ association: "Payer", attributes: ["name"] }],
+                },
+            ],
+            order: [[Expense, "createdAt", "ASC"]],
+        });
+
+        // 2. SUME DE RECUPERAT (Ce am plătit eu pentru alții)
+        const debtsToMe = await ExpenseDebt.findAll({
+            include: [
+                {
+                    model: Expense,
+                    where: {
+                        payerId: userId,
+                        createdAt: { [Op.between]: [startDate, endDate] },
+                    },
+                },
+                {
+                    model: User, // Cine îmi datorează
+                    attributes: ["name"],
+                },
+            ],
+            order: [[Expense, "createdAt", "ASC"]],
+        });
+
+        // Calculăm rezumatele financiare
+        let totalToPay = 0;
+        let totalToReceive = 0;
+
+        myDebts.forEach((d) => {
+            if (!d.isSettled) totalToPay += parseFloat(d.amountOwed);
+        });
+        debtsToMe.forEach((d) => {
+            if (!d.isSettled) totalToReceive += parseFloat(d.amountOwed);
+        });
+
+        // Inițializare Document
+        const doc = new PDFDocument({ size: "A4", margin: 0 });
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="Raport_${removeDiacritics(user.name).replace(/\s+/g, "_")}_${month}_${year}.pdf"`,
+        );
+        doc.pipe(res);
+
+        const colors = {
+            primary: "#1e293b", // Gri foarte închis
+            red: "#dc2626", // Roșu pt datorii
+            green: "#16a34a", // Verde pt recuperări
+            secondary: "#f8fafc", // Gri f deschis
+            textMain: "#334155",
+            textMuted: "#64748b",
+            border: "#e2e8f0",
+        };
+
+        // --- HEADER ---
+        doc.rect(0, 0, 612, 110).fill(colors.primary);
+        doc.fillColor("white")
+            .font("Helvetica-Bold")
+            .fontSize(22)
+            .text("EXTRAS DE CONT PERSONAL", 50, 35);
+        doc.fillColor("white")
+            .font("Helvetica")
+            .fontSize(12)
+            .text(
+                `Titular: ${removeDiacritics(user.name)}   |   Perioada: Luna ${month} / Anul ${year}`,
+                50,
+                65,
+            );
+
+        // --- SUMAR CUTII ---
+        // Box 1: De Plată
+        doc.rect(50, 130, 240, 60)
+            .lineWidth(1)
+            .strokeColor(colors.red)
+            .stroke();
+        doc.fillColor(colors.textMuted)
+            .font("Helvetica-Bold")
+            .fontSize(10)
+            .text("RESTANT DE PLATA", 65, 145);
+        doc.fillColor(colors.red)
+            .font("Helvetica-Bold")
+            .fontSize(18)
+            .text(`${totalToPay.toFixed(2)} RON`, 65, 160);
+
+        // Box 2: De Recuperat
+        doc.rect(320, 130, 240, 60)
+            .lineWidth(1)
+            .strokeColor(colors.green)
+            .stroke();
+        doc.fillColor(colors.textMuted)
+            .font("Helvetica-Bold")
+            .fontSize(10)
+            .text("RESTANT DE INCASAT", 335, 145);
+        doc.fillColor(colors.green)
+            .font("Helvetica-Bold")
+            .fontSize(18)
+            .text(`${totalToReceive.toFixed(2)} RON`, 335, 160);
+
+        let currentY = 220;
+
+        // --- FUNCȚIE AJUTĂTOARE DESENARE TABEL ---
+        const drawTable = (title, data, titleColor, personColumnLabel) => {
+            if (currentY > 700) {
+                doc.addPage();
+                currentY = 50;
+            }
+
+            // Titlu secțiune
+            doc.fillColor(titleColor)
+                .font("Helvetica-Bold")
+                .fontSize(14)
+                .text(title, 50, currentY);
+            currentY += 20;
+
+            if (data.length === 0) {
+                doc.fillColor(colors.textMuted)
+                    .font("Helvetica")
+                    .fontSize(11)
+                    .text(
+                        "Nu exista inregistrari in aceasta categorie.",
+                        50,
+                        currentY,
+                    );
+                currentY += 40;
+                return;
+            }
+
+            // Header Tabel
+            doc.rect(50, currentY, 512, 25).fill(titleColor);
+            doc.fillColor("white").font("Helvetica-Bold").fontSize(10);
+            doc.text("Data", 60, currentY + 8);
+            doc.text(personColumnLabel, 130, currentY + 8);
+            doc.text("Descriere", 250, currentY + 8);
+            doc.text("Status", 430, currentY + 8);
+            doc.text("Suma", 490, currentY + 8, { width: 60, align: "right" });
+
+            currentY += 25;
+
+            // Rânduri
+            doc.font("Helvetica").fontSize(9);
+            data.forEach((row, index) => {
+                if (currentY > 770) {
+                    doc.addPage();
+                    currentY = 50;
+                }
+
+                if (index % 2 === 0)
+                    doc.rect(50, currentY, 512, 25).fill(colors.secondary);
+
+                doc.fillColor(colors.textMain);
+
+                const dateStr = new Date(
+                    row.Expense.createdAt,
+                ).toLocaleDateString("ro-RO");
+                const person = removeDiacritics(
+                    personColumnLabel === "Catre"
+                        ? row.Expense.Payer.name
+                        : row.User.name,
+                );
+
+                let desc = removeDiacritics(row.Expense.description);
+                if (desc.length > 25) desc = desc.substring(0, 22) + "...";
+
+                const status = row.isSettled ? "ACHITAT" : "NEACHITAT";
+                const amount = parseFloat(row.amountOwed).toFixed(2);
+
+                doc.text(dateStr, 60, currentY + 8);
+                doc.text(person, 130, currentY + 8);
+                doc.text(desc, 250, currentY + 8);
+
+                // Colorăm statusul pe rând
+                doc.fillColor(row.isSettled ? colors.green : colors.red).text(
+                    status,
+                    430,
+                    currentY + 8,
+                );
+
+                doc.fillColor(colors.textMain)
+                    .font("Helvetica-Bold")
+                    .text(amount, 490, currentY + 8, {
+                        width: 60,
+                        align: "right",
+                    });
+
+                doc.font("Helvetica"); // reset font for next line
+                currentY += 25;
+            });
+            doc.moveTo(50, currentY)
+                .lineTo(562, currentY)
+                .lineWidth(1)
+                .strokeColor(colors.border)
+                .stroke();
+            currentY += 30;
+        };
+
+        // Desenăm cele două tabele
+        drawTable("DATORIILE MELE", myDebts, colors.red, "Catre");
+        drawTable("SUME DE RECUPERAT", debtsToMe, colors.green, "De la");
+
+        // --- FOOTER ---
+        const generatedAt = new Date().toLocaleString("ro-RO");
+        doc.page.margins.bottom = 0;
+
+        doc.fillColor(colors.textMuted)
+            .font("Helvetica-Oblique")
+            .fontSize(9)
+            .text(
+                `Generat automat la data de ${generatedAt}. Document cu caracter informativ.`,
+                50,
+                800,
+                { align: "center", width: 512 },
+            );
+
+        doc.end();
+    } catch (error) {
+        console.error("Eroare generare PDF:", error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                message: "Eroare la generarea raportului",
+                error: error.message,
+            });
+        }
+    }
+};
+
 module.exports = {
     createExpense,
     createAdminBill,
@@ -964,4 +1236,5 @@ module.exports = {
     sendPaymentReminderForCredit,
     createPaymentIntentEndpoint,
     confirmPaymentEndpoint,
+    downloadMonthlyReport,
 };

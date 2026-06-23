@@ -14,6 +14,7 @@ const {
     settleDebt,
     createPaymentIntentEndpoint,
     confirmPaymentEndpoint,
+    downloadMonthlyReport,
 } = require("../controllers/expenseController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 
@@ -27,6 +28,7 @@ router.get("/history", getExpenseHistory);
 router.get("/debts-details", getDebtsDetails);
 router.get("/payment-history", getPaymentHistory);
 router.get("/by-type", getExpensesByType);
+router.get("/report/monthly", protect, downloadMonthlyReport);
 router.post("/send-reminder", sendPaymentReminderEndpoint);
 router.post("/send-reminder-credit", sendPaymentReminderForCredit);
 router.post("/settle-debt", settleDebt);
